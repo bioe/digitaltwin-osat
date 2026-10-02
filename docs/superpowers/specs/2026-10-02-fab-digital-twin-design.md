@@ -66,7 +66,7 @@ A breadcrumb (`Site › Fab › L2`) lets the user go back up.
 
 - **KPI chips** (top): context-aware — site KPIs at site level, zone KPIs at block/floor level.
 - **Detail panel** (right, slides in): floor summary when nothing is selected; asset detail when an asset is selected. Contains KPI tiles, a 10-minute trend chart, and an alarm list.
-- **Overlay toggles** per floor. Fab: Tool status · Particles · Temp · Humidity. Office: Occupancy · Energy · Temp.
+- **Overlay toggles** per floor. Fab: Tool status · Particles · Temp · Humidity. Office: Occupancy · Energy · Temp. Warehouse: Stock level.
 - **Scenario menu**: start a scripted event.
 - **Breadcrumb** (bottom left) and **Legend**.
 
@@ -125,9 +125,18 @@ src/
 - Low-poly code-made geometry only.
 - Target: 60 fps on a recent laptop.
 
+### Detail rules
+- **Seed counts**: 8 bays × 25 tools = 200 tools. Tool IDs follow `<TYPE>-<NN>` (e.g. `ETCH-03`, `LITHO-12`). ~1,200 lots in WIP; ~150 FOUPs visible on the AMHS track at once. Warehouse: ~40 racks per floor, 8 AGVs.
+- **History**: the ring buffer (600 samples, 1 s) holds site and zone KPIs, plus the small per-asset series the panel charts use (tool OEE, AGV battery, rack stock). Per-asset history is stored as `Float32Array` ring buffers.
+- **Scenarios**: each scenario has a fixed duration (60–120 s) and then recovers on its own. More than one can run at once. "Normal day" stops all active scenarios and resets to baseline.
+- **Site-wide KPI board**: a 3D wall screen in the office L3 board room (rendered with drei `Html`). Clicking it opens the site KPIs in the detail panel.
+- **Overlays**: one heatmap overlay at a time per floor (exclusive). Warehouse overlay: Stock level. Fab default overlay is Tool status.
+- **Bridges**: connect at L2 floor level (+6 m) on all three blocks. Fab L2 is taller (8 m) only at its ceiling.
+- **Test hook**: in dev builds, `window.__store` exposes the Zustand store so Playwright can set selection and drill level directly.
+
 ## 7. Error handling
 
-- No WebGL → show a message and a 2D fallback: the KPI panels without 3D.
+- No WebGL → show a message and a 2D fallback: KPI chips + site summary panel + scenario menu. No drill-down.
 - Sim clamps all values to valid ranges (yield 0–100 %, stock ≥ 0, battery 0–100 %). A bad scenario step cannot corrupt state.
 - Hidden tab → sim pauses. On return, it continues without catch-up.
 
