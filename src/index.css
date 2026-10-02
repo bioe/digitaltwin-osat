@@ -2,3 +2,9 @@
 
 html, body, #root { height: 100%; margin: 0; }
 body { background: #eef2f6; color: #1e293b; font-family: Inter, ui-sans-serif, system-ui, sans-serif; overflow: hidden; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: none; }
+}
+.panel-enter { animation: panel-in 220ms ease-out; }

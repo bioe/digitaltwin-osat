@@ -34,7 +34,7 @@ export const BLOCKS: Record<BlockId, BlockDef> = {
   warehouse: {
     id: 'warehouse',
     name: 'Warehouse',
-    center: [250, 0],
+    center: [240, 0],
     size: [120, 150],
     floorHeights: [6, 6, 6],
     floorNames: ['Receiving & AGV', 'Storage', 'Storage'],
