@@ -37,11 +37,45 @@ Wire bond is the largest zone (32 tools): every unit needs 32 wires at ~20 wires
 
 | Section | Mode | Why |
 |---|---|---|
-| Sort → Grind → Saw → Die Attach | **OHT** (16 vehicles, rail at 3.6 m) | Wafer-level carriers (FOUP, frame cassette) are heavy and fragile; OHT gives clean, ceiling-level transport, as in a front-end fab. |
+| Sort → Grind → Saw → Die Attach | **OHT** (10 vehicles, rail at 3.6 m) | Wafer-level carriers (FOUP, frame cassette) are heavy and fragile; OHT gives clean, ceiling-level transport, as in a front-end fab. |
 | Wire Bond → Molding → Marking | **Overhead conveyor** (rail at 2.7 m, drop lifts per tool) | High-frequency, light magazines; a continuous conveyor is cheaper per move than vehicles. |
-| Package Saw → Test → Inspection → T&R → FG | **ARV** (12 AMRs with lift + roller transfer) | Many small tray/reel moves over short distances; flexible routing as product mix changes. |
+| Package Saw → Test → Inspection → T&R → FG | **ARV** (8 AMRs with lift + roller transfer) | Many small tray/reel moves over short distances; flexible routing as product mix changes. |
 
 Stockers S0–S11 buffer WIP between every step. S4 and S7 are hand-off stockers between two transport modes.
+
+## Material-handling optimisation
+
+The fleets went from 22 OHT / 16 ARV to 16 / 12, and then to **10 OHT / 8 ARV**, with the same output (~62K UPH in the sim). Four dispatch rules make this possible:
+
+| Rule | Effect |
+|---|---|
+| Direct tool-to-tool delivery | When the next process uses the same transport mode and a tool there has a free input port, the finished lot goes straight there. One move replaces two (tool → stocker → tool). About half of the OHT and ARV moves are now direct. |
+| Nearest vehicle–job pairing | Free vehicles and waiting jobs are paired by the shortest empty run (rail distance for OHT, aisle distance for ARV), not first-come-first-served. |
+| Urgency | Moves that feed an empty tool, or clear a full output port, get priority. |
+| ARV opportunity charging | ARVs charge on contacts at every transfer port and take jobs down to 15 % battery, so they rarely drive back to the dock to charge. |
+
+Measured over 30 sim minutes (average of 10 s samples):
+
+| Fleet (OHT / ARV) | Dispatch | Output (UPH) | Tools waiting for material | Jobs waiting (OHT / ARV) |
+|---|---|---|---|---|
+| 16 / 12 | old | 59K | 8.1 | 4.7 / 4.8 |
+| 16 / 12 | new | 62K | 4.4 | 0.1 / 0.0 |
+| 11 / 9 | new | 62K | 6.2 | 2.1 / 0.8 |
+| **10 / 8** | new | 62K | 8.7 | 2.4 / 4.3 |
+
+At 10 / 8 the vehicles are busy 96–98 % of the time. Use 11 / 9 if you need spare capacity for peaks or breakdowns.
+
+## Shipping
+
+| Step | Equipment | Notes |
+|---|---|---|
+| FG feed | ARV (from the shared fleet) | One FG lot per move, S11 → packing-station infeed; 2 lots per pallet |
+| Box packing | 1 packing station (carton erector, case sealer) | 12 cartons per pallet |
+| Carton transfer | Belt conveyor + gantry picker | Belt to the pallet build position; the picker stacks 3 layers of 2 × 2 |
+| Wrapping | 1 in-line rotary stretch-wrapper | Pallet rolls in on the pallet line, is wrapped, rolls out |
+| Buffer | Accumulating roller conveyor, 4 pallets | Level 3, west end; the head pallet rolls into the lift car |
+| Level 3 → ground | Exterior freight lift, 3 × 3 m car | One pallet per trip; the car stops at truck-bed height (1.25 m) |
+| Dispatch | Rigid box truck, 6 pallets | Reverses to the lift; leaves when full, or after 30 s with no pallet ready |
 
 ## Floor
 

@@ -84,9 +84,21 @@ export const PARAMS: Record<string, ParamSpec[]> = {
     ['Press force', 30, 1.5, 'kN', 1],
     ['Lead coplanarity', 45, 8, 'µm', 0],
   ],
+  packStation: [
+    ['Cartons / min', 12, 1.5, '', 1],
+    ['Seal tape tension', 18, 2, 'N', 1],
+    ['Box weight', 4.6, 0.3, 'kg', 2],
+  ],
+  stretchWrapper: [
+    ['Turntable speed', 12, 1, 'rpm', 1],
+    ['Film pre-stretch', 250, 15, '%', 0],
+    ['Wrap force', 35, 4, 'N', 0],
+  ],
 }
 
 export const RECIPES: Record<string, string[]> = {
+  packStation: ['PK_REEL13_BOX6_V2', 'PK_REEL7_BOX12_V1'],
+  stretchWrapper: ['WR_PALLET_3TOP_2BOT', 'WR_PALLET_EXPORT_V3'],
   proberCell: ['MCU-A7_SORT_V12', 'PMIC-Q5_SORT_V08'],
   backGrinder: ['BG_775-200UM_P2', 'BG_775-150UM_P3'],
   dicingSaw: ['DC_3x3_CU-LK_V5', 'DC_2.6x2.6_V3'],

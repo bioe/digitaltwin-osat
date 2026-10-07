@@ -2,8 +2,9 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { CarrierKey } from '../data/processes'
-import { AISLE_N, AISLE_S, CONV_Y, OHT_Y } from '../layout/layout'
-import { pathAt, project, type P2, type Path } from '../layout/path'
+import { CONV_Y, OHT_Y } from '../layout/layout'
+import { liftSpots } from '../layout/lifts'
+import { pathAt, type P2, type Path } from '../layout/path'
 import { carrierH, world } from '../sim/world'
 import { useUI } from '../store'
 import { Instanced, setPose } from './Instanced'
@@ -130,6 +131,9 @@ function collectCarriers() {
   const map = new Map<CarrierKey, CarrierPos[]>(CARRIERS.map(k => [k, []]))
   const put = (k: CarrierKey, x: number, y: number, z: number, r: number) => map.get(k)!.push({ x, y, z, r })
   // lots waiting on tool load ports
+  // FG lots dropped by ARV at the packing-station infeed
+  const packer = world.toolById.get('PACK-01')
+  if (packer) world.shipping.packIn.forEach((l, i) => put(l.carrier, packer.inPort[0] + (i - 0.5) * 0.45, 0.95, packer.inPort[2], packer.rotY))
   for (const t of world.tools) {
     if (t.aux) continue
     const staged = t.next ?? t.lot
@@ -247,11 +251,11 @@ function Chargers() {
   const geo = useMemo(() => {
     const g: THREE.BufferGeometry[] = []
     for (const c of world.L.chargers) {
-      const b = new THREE.BoxGeometry(0.5, 0.45, 0.18)
-      b.translate(c.pos[0], 0.225, c.pos[1] + 0.68)
+      const b = new THREE.BoxGeometry(0.5, 0.45, 0.12)
+      b.translate(c.pos[0], 0.225, c.pos[1] + 0.42)
       g.push(b)
-      const plate = new THREE.BoxGeometry(0.9, 0.02, 1.3)
-      plate.translate(c.pos[0], 0.01, c.pos[1])
+      const plate = new THREE.BoxGeometry(0.9, 0.03, 0.9)
+      plate.translate(c.pos[0], 0.025, c.pos[1]) // top at 4 cm, clear of the painted lane lines
       g.push(plate)
     }
     return mergeGeometries(g)!
@@ -265,24 +269,7 @@ function Chargers() {
 
 /** Drop-lift columns at every conveyor station. */
 function ConvLifts() {
-  const stations = useMemo(() => {
-    const loop = world.L.loops.CONV
-    const list: { x: number; z: number; rot: number; port: [number, number, number] }[] = []
-    const seen = new Set<string>()
-    const addPort = (p: [number, number, number]) => {
-      if (project(loop, [p[0], p[2]]).dist > 0.6) return
-      const key = `${p[0].toFixed(2)},${p[2].toFixed(2)}`
-      if (seen.has(key)) return
-      seen.add(key)
-      // column stands on the aisle side of the port, carriage faces the port
-      const aisle = p[2] < 0 ? AISLE_N : AISLE_S
-      const dir = Math.sign(aisle - p[2]) || 1
-      list.push({ x: p[0] + 0.35, z: p[2] + dir * 0.45, rot: dir > 0 ? Math.PI : 0, port: p })
-    }
-    for (const t of world.tools) if (!t.aux && (t.proc === 'wb' || t.proc === 'mold' || t.proc === 'mark')) t.ports.forEach(addPort)
-    for (const s of world.stockers) s.ports.forEach(addPort)
-    return list
-  }, [])
+  const stations = useMemo(liftSpots, [])
   const mats = useMemo(() => stations.map(s => setPose(new THREE.Matrix4(), s.x, 0, s.z, s.rot)), [stations])
   return (
     <Instanced

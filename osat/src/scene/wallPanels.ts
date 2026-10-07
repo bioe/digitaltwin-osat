@@ -145,6 +145,37 @@ const drawLeft: Draw = g => {
       g.fillText(txt, x + 266, ty)
     })
   })
+  // pack & ship card in the free slot after the last process
+  {
+    const i = PROCESSES.length
+    const x = 24 + (i % 2) * (cw + 12)
+    const y = 58 + Math.floor(i / 2) * (ch + 8)
+    const units = world.shipUnits()
+    g.fillStyle = 'rgba(10,26,48,0.95)'
+    g.fillRect(x, y, cw, ch)
+    g.strokeStyle = 'rgba(56,189,248,0.25)'
+    g.strokeRect(x + 0.5, y + 0.5, cw - 1, ch - 1)
+    const im = thumb('packStation')
+    if (im.complete) g.drawImage(im, x + 8, y + 9, 114, 82)
+    g.fillStyle = INK
+    g.font = '700 23px Rajdhani, sans-serif'
+    g.fillText('Pack & Ship', x + 134, y + 26)
+    g.fillStyle = STATUS_HEX.run
+    g.textAlign = 'right'
+    g.fillText(`${units.filter(u => u.state === 'run').length}/${units.length}`, x + cw - 10, y + 26)
+    g.textAlign = 'left'
+    units.slice(0, 3).forEach((u, k) => {
+      const c = STATUS_HEX[u.state]
+      const ty = y + 50 + k * 20
+      dot(g, x + 140, ty - 6, 5, c)
+      g.fillStyle = INK2
+      g.font = '500 18px JetBrains Mono, monospace'
+      g.fillText(u.id, x + 152, ty)
+      g.fillStyle = c
+      g.font = '600 19px Rajdhani, sans-serif'
+      g.fillText(u.text, x + 266, ty)
+    })
+  }
   // AI auto recovery
   const y0 = 716
   panel(g, 12, y0, W - 24, H - y0 - 12, 'AI auto recovery')
@@ -228,6 +259,16 @@ const drawCenter: Draw = g => {
     g.fillText(p.short, tx + 26, 43)
     tx += tw + 8
   })
+  {
+    const units = world.shipUnits()
+    const st = units.some(u => u.state === 'alarm') ? 'alarm' : units.some(u => u.state === 'idle') ? 'idle' : 'run'
+    const tw = g.measureText('SHIP').width + 40
+    g.fillStyle = 'rgba(14,40,72,0.9)'
+    g.fillRect(tx, 20, tw, 32)
+    dot(g, tx + 14, 36, 5, STATUS_HEX[st])
+    g.fillStyle = INK
+    g.fillText('SHIP', tx + 26, 43)
+  }
   // floor map
   const B = world.L.bounds
   const mx = 40
@@ -275,19 +316,21 @@ const drawCenter: Draw = g => {
     const tools = world.tools.filter(t => t.proc === z.proc.id && !t.aux)
     const pct = Math.round((tools.filter(t => t.state === 'run').length / tools.length) * 100)
     const x = X((z.x0 + z.x1) / 2)
-    const y = z.row === 'north' ? Z(z.z0) - 8 : Z(z.z1) + 52
+    const y = z.row === 'north' ? Z(z.z0) - 8 : Z(z.z1) + 70
     g.font = '700 21px Rajdhani, sans-serif'
     const w = Math.max(g.measureText(z.proc.short).width, 120) + 20
     g.fillStyle = 'rgba(6,18,34,0.92)'
-    g.fillRect(x - w / 2, y - 46, w, 44)
+    g.fillRect(x - w / 2, y - 46, w, 62)
     g.strokeStyle = MODE_TINT[z.proc.mode]
-    g.strokeRect(x - w / 2, y - 46, w, 44)
+    g.strokeRect(x - w / 2, y - 46, w, 62)
     g.fillStyle = INK
     g.textAlign = 'center'
     g.fillText(z.proc.short, x, y - 27)
     g.font = '600 17px Rajdhani, sans-serif'
     g.fillStyle = pct >= 80 ? STATUS_HEX.run : STATUS_HEX.idle
     g.fillText(`Running ${pct}%`, x, y - 9)
+    g.fillStyle = '#bae6fd'
+    g.fillText(`MMR ${world.mmr(z.proc.id).label}`, x, y + 9)
     g.textAlign = 'left'
   }
   // alarm callouts

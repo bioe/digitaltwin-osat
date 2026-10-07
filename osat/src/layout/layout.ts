@@ -37,7 +37,12 @@ export const WALL_H = 2.5
 export const ROOM_HALF = 5.3
 /** Mezzanine floor level of the war room. */
 export const MEZZ_Y = 4.7
-export const ARV_LANE = 1.8
+/** Corridor centre line for ARVs; with keep-right (±ARV_KEEP) the two lanes sit at 1.65 / 2.45 m. */
+export const ARV_LANE = 2.05
+/** Keep-right offset for ARVs (lane separation 0.8 m, ARV width 0.75 m). */
+export const ARV_KEEP = 0.4
+/** Keep-right offset for people: they walk at the aisle edge, outside the ARV lanes. */
+export const WALK_KEEP = 1.1
 
 export type Row = 'north' | 'south'
 
@@ -270,7 +275,9 @@ function build(): Layout {
   // ARV docks along the corridor edge in front of the test rooms
   const chargers: Layout['chargers'] = []
   const wr0 = cx - 8
-  for (let i = 0; i < 16; i++) chargers.push({ pos: [wr0 - 2.5 - 15 * 1.6 + i * 1.6, 2.75], rotY: Math.PI })
+  // one dock per ARV; the fleet is right-sized to measured demand (ARVs are expensive)
+  const ARV_FLEET = 8
+  for (let i = 0; i < ARV_FLEET; i++) chargers.push({ pos: [wr0 - 2.5 - (ARV_FLEET - 1) * 1.6 + i * 1.6, 3.2], rotY: Math.PI })
   // workbenches in the front half of every stocker bay (beside the walkway)
   const benches: Layout['benches'] = []
   for (const row of ['north', 'south'] as const) {

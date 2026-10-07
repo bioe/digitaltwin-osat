@@ -12,24 +12,22 @@ export const STATUS_LABEL = { run: 'Production', idle: 'Idle', alarm: 'Alarm / s
 const std = (color: string, o: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05, ...o })
 
-/** Clear float glass: physical transmission with Fresnel reflections and a faint edge tint. */
+/**
+ * Clear float glass: transparent with Fresnel-ish specular and env reflections.
+ * (No physical transmission: that costs a full extra scene render every frame.)
+ */
 export function glassMaterial(tint = '#d6ecef') {
   return new THREE.MeshPhysicalMaterial({
     color: tint,
-    metalness: 0,
-    roughness: 0.02,
-    transmission: 0.9,
-    thickness: 0.06,
-    ior: 1.52,
-    attenuationColor: new THREE.Color('#9fd8c8'),
-    attenuationDistance: 0.35,
+    metalness: 0.1,
+    roughness: 0.03,
+    transparent: true,
+    opacity: 0.26,
     specularIntensity: 1,
     specularColor: new THREE.Color('#ffffff'),
     clearcoat: 1,
     clearcoatRoughness: 0.03,
-    envMapIntensity: 3.5,
-    transparent: true,
-    opacity: 1,
+    envMapIntensity: 2.4,
     depthWrite: false,
     side: THREE.DoubleSide,
   })

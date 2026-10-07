@@ -20,7 +20,10 @@ function reg(id: string, pos: [number, number, number], maxDist: number) {
 export function LabelProjector() {
   const v = useMemo(() => new THREE.Vector3(), [])
   useFrame(({ camera, size }) => {
-    for (const { el, pos, maxDist } of els.values()) {
+    // walking tour: only nearby labels, so eye level does not drown in callouts
+    const tour = useUI.getState().tour
+    for (const { el, pos, maxDist: far } of els.values()) {
+      const maxDist = tour ? Math.min(far, far < 100 ? 12 : 30) : far
       v.set(pos[0], pos[1] + FLOOR_Y, pos[2])
       const d = camera.position.distanceTo(v)
       v.project(camera)
@@ -59,6 +62,7 @@ export function LabelLayer() {
                   <span className="inline-block h-[6px] w-[6px] rounded-full" style={{ background: STATUS_HEX[worst] }} />
                   Running {pct}% · {run}/{tools.length}
                 </div>
+                <div className="text-[10.5px] font-semibold leading-tight text-sky-200">MMR {w.mmr(z.proc.id).label}</div>
               </div>
             </div>
           )
@@ -69,6 +73,16 @@ export function LabelLayer() {
             <div className="stk-tag">{s.id} · {s.lots.length}</div>
           </div>
         ))}
+      {layers.labels && (
+        <div ref={reg('pack', [w.L.bounds.x0 + 8, 4.2, w.truckRoutes.liftZ], 420)} className="absolute left-0 top-0" style={{ display: 'none' }}>
+          <div className="callout" style={{ borderColor: '#f59e0b' }}>
+            <div className="text-[13px] font-bold leading-tight">Packing & Shipping</div>
+            <div className="text-[11px] font-semibold leading-tight text-amber-300">
+              {w.shipping.pack >= 0 ? 'Palletizing' : `${w.shipping.packIn.length}/2 FG lots at packer`} · {w.shipping.buffer} pallets at lift
+            </div>
+          </div>
+        </div>
+      )}
       {layers.labels && (
         <div ref={reg('hq', [(wr.x0 + wr.x1) / 2, MEZZ_Y + 4.3, 0], 420)} className="absolute left-0 top-0" style={{ display: 'none' }}>
           <div className="callout" style={{ borderColor: '#f43f5e' }}>
@@ -90,7 +104,7 @@ export function LabelLayer() {
                 <div className="text-[12.5px] font-bold leading-tight">{t.id}</div>
                 <div className="flex items-center gap-1 text-[11px] font-semibold leading-tight" style={{ color: col }}>
                   <span className="rounded-sm px-1 text-[10px] text-black" style={{ background: col }}>!</span>
-                  {ai ? 'AI recovery in progress' : t.tech ? `${t.tech.name} ${t.tech.working ? 'repairing' : 'en route'}` : t.alarm!.text}
+                  {ai ? 'AI recovery in progress' : t.tech?.onCall && t.tech.eta > 0 ? `${t.tech.name} called in · ETA ${Math.ceil(t.tech.eta)} s` : t.tech ? `${t.tech.name} ${t.tech.working ? 'repairing' : 'en route'}` : t.alarm!.text}
                 </div>
               </button>
               <div className="mx-auto h-3 w-px" style={{ background: col }} />

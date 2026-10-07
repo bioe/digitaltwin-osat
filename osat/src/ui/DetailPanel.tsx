@@ -1,7 +1,7 @@
 import { MODE_LABEL, PROCESSES, PROC_BY_ID, requiredTools } from '../data/processes'
 import { MODELS } from '../models'
 import { STATUS_HEX } from '../scene/materials'
-import type { Tool, World } from '../sim/world'
+import { LOTS_PER_PALLET, PACK_END, PALLET_CAP, WRAP_END, WRAP_IN, World, type Tool } from '../sim/world'
 import { isMoving, useTick, useUI, type Sel } from '../store'
 import { Row, Section, Spark, StatusBadge, Tile, Timeline, clockStr, fmt } from './bits'
 
@@ -36,6 +36,8 @@ function Body({ w, sel }: { w: World; sel: Sel }) {
   if (sel.kind === 'oht') return <OhtView w={w} id={sel.id} />
   if (sel.kind === 'arv') return <ArvView w={w} id={sel.id} />
   if (sel.kind === 'tech') return <TechView w={w} id={sel.id} />
+  if (sel.kind === 'truck') return <TruckView w={w} />
+  if (sel.kind === 'ship') return sel.id === 'TRUCK' && w.shipping.truck ? <TruckView w={w} /> : <ShipView w={w} id={sel.id} />
   return <ZoneView w={w} id={sel.id} />
 }
 
@@ -59,7 +61,7 @@ function ToolView({ w, t }: { w: World; t: Tool }) {
   const mtba = t.runS / Math.max(1, t.history.length + 6) / 60
   return (
     <div>
-      <Header kicker={`${p.name}${t.aux ? ' · auxiliary' : ''}`} title={t.id} sub={MODELS[t.model].name} />
+      <Header kicker={t.ship ? 'Pack & Ship · final step' : `${p.name}${t.aux ? ' · auxiliary' : ''}`} title={t.id} sub={MODELS[t.model].name} />
       <div className="mt-2 flex items-center gap-2">
         <StatusBadge state={t.state} />
         <span className="truncate text-[12px] text-[var(--ink2)]">{t.reason}</span>
@@ -73,16 +75,27 @@ function ToolView({ w, t }: { w: World; t: Tool }) {
           </div>
           <div className="mt-0.5 text-[13px] font-medium">{t.alarm.text}</div>
           <div className="mt-1 text-[11px] text-[var(--ink2)]">
-            {t.tech
+            {t.tech?.onCall && t.tech.eta > 0
+              ? `${t.tech.name} called in · on the way · ETA ${Math.ceil(t.tech.eta)} s`
+              : t.tech
               ? t.tech.working
                 ? `${t.tech.name} working at tool · ~${Math.ceil(t.tech.timer)} s`
                 : `${t.tech.name} (${t.tech.role}) en route`
-              : t.alarm.soft
-                ? 'Soft alarm – remote reset allowed'
-                : 'Waiting for technician'}
+              : t.alarm.ai
+                ? 'AI virtual operator is recovering this tool'
+                : !w.staffed
+                  ? 'Lights-out night: waits for the morning shift (remote reset if soft)'
+                  : t.alarm.soft
+                    ? 'Soft alarm – remote reset allowed'
+                    : 'Waiting for technician'}
           </div>
           <div className="mt-2 flex gap-2">
             {t.alarm.soft && <button className="btn" onClick={() => w.remoteReset(t.id)}>Remote reset</button>}
+            {!w.staffed && !t.tech && !t.alarm.ai && (
+              <button className="btn !border-amber-400/60 !bg-amber-400/15" onClick={() => w.callTech(t.id)}>
+                📞 Call technician in
+              </button>
+            )}
             {t.tech && <button className="btn" onClick={() => select({ kind: 'tech', id: t.tech!.id }, true)}>Follow {t.tech.role}</button>}
           </div>
         </div>
@@ -106,13 +119,34 @@ function ToolView({ w, t }: { w: World; t: Tool }) {
         </Section>
       )}
 
+      {t.ship && (
+        <Section title="Current pallet">
+          {(() => {
+            const sh = w.shipping
+            const mine = t.id === 'PACK-01' ? sh.pack >= 0 && sh.pack < PACK_END : sh.pack >= WRAP_IN && sh.pack < WRAP_END
+            const k = !mine ? 0 : t.id === 'PACK-01' ? sh.pack / PACK_END : (sh.pack - WRAP_IN) / (WRAP_END - WRAP_IN)
+            return (
+              <>
+                <Row k="Pallet" v={mine ? `${LOTS_PER_PALLET} lots · ${fmt(LOTS_PER_PALLET * 11_520)} units` : 'none'} />
+                {t.id === 'PACK-01' && <Row k="FG lots at infeed" v={`${sh.packIn.length} / ${LOTS_PER_PALLET}${t.inbound ? ' · ARV bringing 1' : ''}`} />}
+                <Row k="FG lots in S11" v={w.stockers[11].lots.length} />
+                <Row k="Pallets at lift" v={`${sh.buffer} / ${World.BUFFER_CAP}`} />
+                <div className="mt-1.5 h-1.5 overflow-hidden rounded bg-white/10">
+                  <div className="h-full" style={{ width: `${k * 100}%`, background: STATUS_HEX[t.state] }} />
+                </div>
+              </>
+            )
+          })()}
+        </Section>
+      )}
+
       <Section title="Performance · today">
         <div className="grid grid-cols-3 gap-1.5">
           <Tile label="OEE" value={`${(oee * 100).toFixed(1)}%`} tone={oee > 0.8 ? STATUS_HEX.run : STATUS_HEX.idle} />
           <Tile label="Avail." value={`${(avail * 100).toFixed(0)}%`} />
           <Tile label="Perf." value={`${(Math.min(1, perf) * 100).toFixed(0)}%`} />
-          {!t.aux && <Tile label="UPH plan" value={fmt(t.uph)} />}
-          {!t.aux && <Tile label="Units" value={fmt(t.unitsToday)} />}
+          {(!t.aux || t.ship) && <Tile label="UPH plan" value={fmt(t.uph)} />}
+          {(!t.aux || t.ship) && <Tile label="Units" value={fmt(t.unitsToday)} />}
           <Tile label="MTBA" value={`${mtba.toFixed(0)} m`} />
         </div>
       </Section>
@@ -121,7 +155,7 @@ function ToolView({ w, t }: { w: World; t: Tool }) {
         <Timeline states={t.timeline} />
       </Section>
 
-      {!t.aux && (
+      {(!t.aux || t.ship) && (
         <Section title="Throughput (UPH)">
           <Spark data={t.uphHist} unit="UPH" />
         </Section>
@@ -235,7 +269,7 @@ function OhtView({ w, id }: { w: World; id: string }) {
 function ArvView({ w, id }: { w: World; id: string }) {
   const a = w.arvs.find(x => x.id === id)!
   const label: Record<string, string> = {
-    parked: 'Charging at dock', wait: 'Waiting for next job', toPick: 'Driving to pick-up', xferPick: 'Transferring (load)', toDrop: 'Driving to drop-off',
+    parked: 'Charging at dock', toPick: 'Driving to pick-up', xferPick: 'Transferring (load)', toDrop: 'Driving to drop-off',
     xferDrop: 'Transferring (unload)', toPark: 'Returning to dock',
   }
   return (
@@ -279,10 +313,66 @@ function TechView({ w, id }: { w: World; id: string }) {
   )
 }
 
+function TruckView({ w }: { w: World }) {
+  const t = w.shipping.truck
+  const sh = w.shipping
+  if (!t) return <div className="text-[12px] text-[var(--ink3)]">Truck has left the site.</div>
+  const label = { inbound: 'Arriving on the service road', reversing: 'Reversing to the freight lift', loading: 'Loading at the freight lift', closing: 'Closing doors', leaving: 'Departing' }
+  return (
+    <div>
+      <Header kicker="Outbound truck · finished goods" title={t.id} sub={t.dest} />
+      <Section title="Now">
+        <Row k="Activity" v={label[t.phase]} />
+        <Row k="Pallets" v={`${t.pallets} / ${PALLET_CAP}`} />
+        <Row k="Units on board" v={fmt(t.units)} />
+        <Row k="Pallets ready at lift" v={sh.buffer} />
+        <Row k="Freight lift" v={sh.lift.phase === 'top' ? 'At level 3' : sh.lift.phase === 'load' ? 'Pallet rolling in' : sh.lift.phase === 'down' ? 'Descending with pallet' : sh.lift.phase === 'unload' ? 'Unloading into truck' : 'Returning to level 3'} />
+      </Section>
+      <Section title="Today">
+        <Row k="Trucks shipped" v={sh.trucks} />
+        <Row k="Units shipped" v={fmt(sh.units)} />
+      </Section>
+    </div>
+  )
+}
+
+function ShipView({ w, id }: { w: World; id: string }) {
+  const select = useUI(s => s.select)
+  const sh = w.shipping
+  const units = w.shipUnits()
+  const u = units.find(x => x.id === id)
+  if (!u) return null
+  return (
+    <div>
+      <Header kicker="Pack & Ship · final step" title={u.id} sub={u.name} />
+      <Section title="Now">
+        <div className="mb-1.5"><StatusBadge state={u.state} /></div>
+        <Row k="Activity" v={u.text} />
+        <Row k="FG lots in S11" v={w.stockers[11].lots.length} />
+        <Row k="Pallets at lift" v={`${sh.buffer} / ${World.BUFFER_CAP}`} />
+        <Row k="Truck" v={sh.truck ? `${sh.truck.id} · ${sh.truck.pallets}/${PALLET_CAP} pallets` : `due in ${Math.ceil(sh.nextIn)} s`} />
+      </Section>
+      <Section title="Pack & Ship line">
+        {units.map(x => (
+          <button key={x.id} className="flex w-full items-center gap-2 text-left text-[11.5px] hover:bg-white/5" onClick={() => select(x.tool ? { kind: 'tool', id: x.id } : { kind: 'ship', id: x.id }, true)}>
+            <span className="inline-block h-[7px] w-[7px] rounded-full" style={{ background: STATUS_HEX[x.state] }} />
+            <span className="mono w-[64px] text-[var(--ink2)]">{x.id}</span>
+            <span className="truncate" style={{ color: STATUS_HEX[x.state] }}>{x.text}</span>
+          </button>
+        ))}
+      </Section>
+      <Section title="Today">
+        <Row k="Trucks shipped" v={sh.trucks} />
+        <Row k="Units shipped" v={fmt(sh.units)} />
+      </Section>
+    </div>
+  )
+}
+
 function ZoneView({ w, id }: { w: World; id: string }) {
   const select = useUI(s => s.select)
   const p = PROC_BY_ID[id as keyof typeof PROC_BY_ID]
-  const tools = w.tools.filter(t => t.proc === p.id)
+  const tools = w.tools.filter(t => t.proc === p.id && !t.ship)
   const prod = tools.filter(t => !t.aux)
   const running = prod.filter(t => t.state === 'run')
   const rate = running.reduce((a, t) => a + t.uph * t.perf, 0)
@@ -299,6 +389,15 @@ function ZoneView({ w, id }: { w: World; id: string }) {
       </Section>
       <Section title="Live">
         <Row k="Zone rate now" v={<span className="num text-[15px]">{fmt(rate)} UPH</span>} />
+        <Row
+          k="Man-to-machine ratio"
+          v={
+            <span className="num text-[15px]">
+              {w.mmr(p.id).label} <span className="text-[11px] text-[var(--ink3)]">({w.mmr(p.id).ops} operators · {w.mmr(p.id).machines} machines)</span>
+            </span>
+          }
+        />
+        <Row k="Technician cover" v={`${w.techs.length} techs shared · 1 : ${(w.tools.length / w.techs.length).toFixed(1)} site-wide`} />
         <Row k="Upstream stocker" v={`${w.stockers[PROCESSES.indexOf(p)].lots.length} lots`} />
         <Row k="Carrier" v={p.carrier} />
       </Section>

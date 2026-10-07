@@ -1,10 +1,122 @@
-import { useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { FLOOR_Y } from '../layout/layout'
 import { world } from '../sim/world'
+import { reflectHide } from './reflect'
 
 const STOREY = FLOOR_Y / 2
+
+/** Glass mirror shader: soft 5×5 Gaussian blur of the reflection, faded into a tinted glass body. */
+const GlassMirrorShader = {
+  name: 'GlassMirrorShader',
+  uniforms: {
+    color: { value: null },
+    tDiffuse: { value: null },
+    textureMatrix: { value: null },
+    texel: { value: new THREE.Vector2(1 / 1024, 1 / 512) },
+    strength: { value: 0.7 },
+    body: { value: new THREE.Color('#5d7a8f') },
+    /** Pane size (m): width, height. */
+    panel: { value: new THREE.Vector2(1.5, 1.8) },
+    /** Plane size (m), so the pane grid starts at a corner. */
+    planeSize: { value: new THREE.Vector2(1, 1) },
+  },
+  vertexShader: /* glsl */ `
+    uniform mat4 textureMatrix;
+    varying vec4 vUv;
+    varying vec2 vLocal;
+    #include <common>
+    #include <logdepthbuf_pars_vertex>
+    void main() {
+      vUv = textureMatrix * vec4( position, 1.0 );
+      vLocal = position.xy;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform vec3 color;
+    uniform vec3 body;
+    uniform sampler2D tDiffuse;
+    uniform vec2 texel;
+    uniform float strength;
+    uniform vec2 panel;
+    uniform vec2 planeSize;
+    varying vec4 vUv;
+    varying vec2 vLocal;
+    #include <logdepthbuf_pars_fragment>
+    float hash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+    void main() {
+      #include <logdepthbuf_fragment>
+      // which pane this fragment is on, and where inside it
+      vec2 q = ( vLocal + 0.5 * planeSize ) / panel;
+      vec2 cell = floor( q );
+      vec2 f = fract( q );
+      float h1 = hash( cell );
+      float h2 = hash( cell + 17.0 );
+      // panes are never perfectly flat: shift each pane's reflection a little
+      vec2 uv = vUv.xy / vUv.w + ( vec2( h1, h2 ) - 0.5 ) * 0.02;
+      vec3 sum = vec3( 0.0 );
+      float wsum = 0.0;
+      for ( int x = -2; x <= 2; x++ ) {
+        for ( int y = -2; y <= 2; y++ ) {
+          float w = exp( -float( x * x + y * y ) / 4.5 );
+          sum += texture2D( tDiffuse, uv + vec2( float( x ), float( y ) ) * texel * 1.6 ).rgb * w;
+          wsum += w;
+        }
+      }
+      vec3 refl = ( sum / wsum ) * color * 1.6;
+      vec3 glass = mix( body, refl, strength ) * ( 0.88 + 0.22 * h1 );
+      // dark aluminium joint between panes (≈5 cm)
+      vec2 edge = min( f, 1.0 - f ) * panel;
+      float joint = 1.0 - smoothstep( 0.02, 0.035, min( edge.x, edge.y ) );
+      gl_FragColor = vec4( mix( glass, vec3( 0.06, 0.07, 0.09 ), joint ), 1.0 );
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+}
+
+/** Seen from inside: see-through tinted glass with the same pane grid and dark joints. */
+function insideGlass(planeSize: THREE.Vector2) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.BackSide,
+    uniforms: {
+      tint: { value: new THREE.Color('#5f8196') },
+      panel: { value: new THREE.Vector2(1.5, 1.8) },
+      planeSize: { value: planeSize },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vLocal;
+      void main() {
+        vLocal = position.xy;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 tint;
+      uniform vec2 panel;
+      uniform vec2 planeSize;
+      varying vec2 vLocal;
+      float hash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+      void main() {
+        vec2 q = ( vLocal + 0.5 * planeSize ) / panel;
+        vec2 cell = floor( q );
+        vec2 f = fract( q );
+        vec2 edge = min( f, 1.0 - f ) * panel;
+        float joint = 1.0 - smoothstep( 0.02, 0.035, min( edge.x, edge.y ) );
+        // faint sheen toward the top of each pane, slight pane-to-pane variation
+        float sheen = smoothstep( 0.4, 1.0, f.y ) * 0.12;
+        vec3 glass = tint * ( 0.9 + 0.2 * hash( cell ) ) + sheen;
+        vec3 col = mix( glass, vec3( 0.06, 0.07, 0.09 ), joint );
+        gl_FragColor = vec4( col, mix( 0.4, 1.0, joint ) );
+        #include <colorspace_fragment>
+      }`,
+  })
+}
+
 
 function boxAt(list: THREE.BufferGeometry[], w: number, h: number, d: number, x: number, y: number, z: number) {
   const b = new THREE.BoxGeometry(w, h, d)
@@ -90,18 +202,86 @@ export function LowerFloors() {
       dock: mergeGeometries(dock)!,
     }
   }, [B])
+
+  // exact planar mirrors, one per façade side (L1 + L2 glass share the plane)
+  const group = useRef<THREE.Group>(null)
+  const mirrors = useMemo(() => {
+    const W = B.x1 - B.x0
+    const D = B.z1 - B.z0
+    const cx = (B.x0 + B.x1) / 2
+    const cz = (B.z0 + B.z1) / 2
+    const h = FLOOR_Y - 0.6
+    const sides: [number, number, number, number][] = [
+      [W, cx, B.z1 + 0.07, 0], // south, faces +z
+      [W, cx, B.z0 - 0.07, Math.PI], // north
+      [D, B.x1 + 0.07, cz, Math.PI / 2], // east
+      [D, B.x0 - 0.07, cz, -Math.PI / 2], // west
+    ]
+    const dpr = Math.min(2, window.devicePixelRatio)
+    const tw = Math.round(window.innerWidth * dpr * 0.35)
+    const th = Math.round(window.innerHeight * dpr * 0.35)
+    return sides.map(([w, x, z, ry]) => {
+      const geo = new THREE.PlaneGeometry(w, h)
+      const m = new Reflector(geo, { clipBias: 0.003, textureWidth: tw, textureHeight: th, color: 0xa9c6da, shader: GlassMirrorShader })
+      const u = (m.material as THREE.ShaderMaterial).uniforms
+      u.texel.value = new THREE.Vector2(1 / tw, 1 / th)
+      u.planeSize.value = new THREE.Vector2(w, h)
+      u.panel.value = new THREE.Vector2(1.5, 1.8)
+      m.position.set(x, h / 2, z)
+      m.rotation.y = ry
+      // the inner face: see-through tinted glass when looking out from inside
+      const inner = new THREE.Mesh(geo, insideGlass(new THREE.Vector2(w, h)))
+      inner.raycast = () => {}
+      m.add(inner)
+      return m
+    })
+  }, [B])
+  // performance guard: if the frame rate stays low, drop the mirrors for plain tinted glass (once, no flip-flop)
+  const [mirrorsOn, setMirrorsOn] = useState(true)
+  const perf = useRef({ t: 0, ema: 60, low: 0 })
+  useFrame((_, dt) => {
+    if (!mirrorsOn) return
+    const p = perf.current
+    p.t += dt
+    if (p.t < 5 || dt <= 0 || document.hidden || !document.hasFocus()) return // ignore loading and throttled (unfocused) windows
+    p.ema += (1 / Math.min(dt, 0.25) - p.ema) * 0.05
+    p.low = p.ema < 35 ? p.low + dt : 0
+    if (p.low > 3) {
+      setMirrorsOn(false)
+      console.info(`[UNYSIS] building reflections off (≈${p.ema.toFixed(0)} fps)`)
+    }
+  })
+  const plainGlass = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: '#7f9fb4', metalness: 0.6, roughness: 0.12, envMapIntensity: 1.2 }),
+    [],
+  )
+
+  // the building never reflects itself: hide it (and the level-3 factory) while a mirror renders
+  useEffect(() => {
+    for (const m of mirrors) {
+      const orig = m.onBeforeRender
+      m.onBeforeRender = (...args) => {
+        const hidden = [group.current, ...reflectHide].filter((o): o is THREE.Object3D => !!o && o.visible)
+        for (const o of hidden) o.visible = false
+        orig.apply(m, args)
+        for (const o of hidden) o.visible = true
+      }
+    }
+  }, [mirrors])
+
   return (
     <group>
+      {mirrorsOn ? (
+        mirrors.map((m, i) => <primitive key={i} object={m} />)
+      ) : (
+        <>
+          <mesh geometry={geo.glass} material={plainGlass} />
+          <mesh geometry={geo.glass2} material={plainGlass} />
+        </>
+      )}
+      <group ref={group}>
       <mesh geometry={geo.core} receiveShadow>
         <meshStandardMaterial color="#d7dce2" roughness={0.8} />
-      </mesh>
-      {/* L1: mirror-like reflective curtain wall */}
-      <mesh geometry={geo.glass} receiveShadow>
-        <meshPhysicalMaterial color="#9ec3dd" metalness={0.95} roughness={0.04} clearcoat={1} clearcoatRoughness={0.02} envMapIntensity={2.6} />
-      </mesh>
-      {/* L2: lighter blue-green vision glass */}
-      <mesh geometry={geo.glass2} receiveShadow>
-        <meshPhysicalMaterial color="#a9d3df" metalness={0.7} roughness={0.06} clearcoat={1} envMapIntensity={2.0} />
       </mesh>
       <mesh geometry={geo.frame} castShadow receiveShadow>
         <meshStandardMaterial color="#3a414b" roughness={0.5} metalness={0.4} />
@@ -115,6 +295,7 @@ export function LowerFloors() {
       <mesh geometry={geo.dock}>
         <meshStandardMaterial color="#59616b" roughness={0.6} />
       </mesh>
+      </group>
     </group>
   )
 }

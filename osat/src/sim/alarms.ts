@@ -1,7 +1,7 @@
 import type { ProcId } from '../data/processes'
 
 /** Realistic alarm texts per process (code, text, soft = remote reset allowed). */
-export const ALARMS: Record<ProcId | 'cureOven' | 'plasmaCleaner' | 'uvCurer' | 'trimForm', [string, string, boolean][]> = {
+export const ALARMS: Record<ProcId | 'cureOven' | 'plasmaCleaner' | 'uvCurer' | 'trimForm' | 'packStation' | 'stretchWrapper', [string, string, boolean][]> = {
   sort: [
     ['P-1203', 'Probe card contact resistance high', false],
     ['P-1410', 'Chuck vacuum error', true],
@@ -80,5 +80,16 @@ export const ALARMS: Record<ProcId | 'cureOven' | 'plasmaCleaner' | 'uvCurer' | 
   trimForm: [
     ['T-0205', 'Punch die jam', true],
     ['T-0311', 'Lead coplanarity fail', false],
+  ],
+  packStation: [
+    ['K-0102', 'Carton erector jam', true],
+    ['K-0215', 'Case sealer tape out', true],
+    ['K-0330', 'Box label verify fail', true],
+    ['K-0410', 'Carton magazine empty', false],
+  ],
+  stretchWrapper: [
+    ['W-0105', 'Film break detected', true],
+    ['W-0220', 'Turntable drive overload', false],
+    ['W-0312', 'Pallet height sensor blocked', true],
   ],
 }

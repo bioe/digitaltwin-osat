@@ -18,6 +18,8 @@ export function People() {
         dynamic
         fill={(i, inst) => {
           const k = people[i]
+          // at night only called-in technicians who reached site are on the floor
+          inst.visible = world.staffed || (k.onCall && k.eta <= 0)
           setPose(inst.m, k.pos[0], 0, k.pos[1], k.heading)
           inst.state = k.task === 'repair' && k.working ? 'alarm' : 'run'
           inst.t = world.t
@@ -34,7 +36,7 @@ export function People() {
         count={() => people.length}
         fill={(i, inst) => {
           const k = people[i]
-          inst.visible = !!k.carry
+          inst.visible = !!k.carry && (world.staffed || (k.onCall && k.eta <= 0))
           const fx = Math.sin(k.heading) * 0.36
           const fz = Math.cos(k.heading) * 0.36
           setPose(inst.m, k.pos[0] + fx, 0.98, k.pos[1] + fz, k.heading + Math.PI / 2)

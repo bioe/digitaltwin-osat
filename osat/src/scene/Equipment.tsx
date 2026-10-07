@@ -1,13 +1,12 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { bake } from '../models/dsl'
-import { MODELS } from '../models'
 import { world, type Tool } from '../sim/world'
 import { useUI } from '../store'
 import { Instanced, setPose } from './Instanced'
 import { STATUS } from './materials'
+import { decal } from './decal'
+import { hullOf } from './hull'
 
 const AI_COLOR = new THREE.Color('#fbbf24')
 
@@ -24,6 +23,7 @@ function ToolGroup({ model, tools }: { model: string; tools: Tool[] }) {
         inst.state = t.state
         inst.t = t.activeT
         inst.phase = t.phase
+        if (t.anim) inst.u = t.anim
       }}
       onPick={i => select({ kind: 'tool', id: tools[i].id })}
     />
@@ -54,7 +54,7 @@ function StatusPads({ tools }: { tools: Tool[] }) {
     tools.forEach((t, i) => {
       const ai = !!t.alarm?.ai
       const show = ai ? L.ai : t.state === 'run' ? L.run : t.state === 'idle' ? L.idle : L.down
-      obj.position.set(t.pos[0], 0.02, t.pos[2])
+      obj.position.set(t.pos[0], 0.025, t.pos[2])
       obj.rotation.set(0, t.rotY, 0)
       obj.scale.set(show ? t.size[0] + 0.5 : 0, 1, show ? t.size[1] + 0.5 : 0)
       obj.updateMatrix()
@@ -74,10 +74,10 @@ function StatusPads({ tools }: { tools: Tool[] }) {
   return (
     <group>
       <instancedMesh ref={ring} args={[ringGeo, undefined, tools.length]} frustumCulled={false}>
-        <meshBasicMaterial toneMapped={false} />
+        <meshBasicMaterial toneMapped={false} {...decal(4)} />
       </instancedMesh>
       <instancedMesh ref={fill} args={[fillGeo, undefined, tools.length]} frustumCulled={false} raycast={() => null}>
-        <meshBasicMaterial transparent opacity={0.16} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial transparent opacity={0.16} depthWrite={false} toneMapped={false} {...decal(3)} />
       </instancedMesh>
     </group>
   )
@@ -144,11 +144,7 @@ function Stockers() {
 
 /** Inverted-hull outline + pulsing glow shell around every machine that is in alarm (red) or AI recovery (amber). */
 function AlarmHalo({ model, tools }: { model: string; tools: Tool[] }) {
-  const hull = useMemo(() => {
-    const b = bake(MODELS[model])
-    const list = [...b.byMat.values()].map(g => g.clone())
-    return mergeGeometries(list)!
-  }, [model])
+  const hull = useMemo(() => hullOf(model), [model])
   const line = useRef<THREE.InstancedMesh>(null)
   const glow = useRef<THREE.InstancedMesh>(null)
   const obj = useMemo(() => new THREE.Object3D(), [])

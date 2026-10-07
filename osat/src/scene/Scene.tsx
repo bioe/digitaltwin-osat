@@ -8,17 +8,39 @@ import { FLOOR_Y, OHT_Y } from '../layout/layout'
 import { world } from '../sim/world'
 import { isMoving, positionOf, useUI, worldPos } from '../store'
 import { Building } from './Building'
+import { DayNight } from './DayNight'
 import { Landscape } from './Landscape'
 import { LowerFloors } from './LowerFloors'
+import { FollowOutline } from './FollowOutline'
+import { TourControls } from './Tour'
+import { reflectHide } from './reflect'
+import { Glows } from './Glows'
+import { CallInLights } from './CallInLights'
 import { Overlays } from './Overlays'
+import { Shipping } from './Shipping'
 import { LabelProjector } from './labels'
 import { Equipment } from './Equipment'
 import { People } from './People'
 import { Transport } from './Transport'
 import { WarRoom } from './WarRoom'
 
+/** Live frame rate + render scale, shown in the top bar. */
+export const perfStats = { fps: 0, dpr: 1 }
+
 function SimDriver() {
-  useFrame((_, dt) => world.step(dt))
+  const acc = useRef({ t: 0, n: 0 })
+  useFrame(({ gl }, dt) => {
+    world.step(dt)
+    const a = acc.current
+    a.t += dt
+    a.n++
+    if (a.t >= 1) {
+      perfStats.fps = Math.round(a.n / a.t)
+      perfStats.dpr = gl.getPixelRatio()
+      a.t = 0
+      a.n = 0
+    }
+  })
   return null
 }
 
@@ -42,7 +64,7 @@ function CameraRig() {
   const tmp = useMemo(() => new THREE.Vector3(), [])
   useFrame((_, dt) => {
     const a = anim.current
-    if (!controls) return
+    if (!controls || useUI.getState().tour) return
     // follow a moving selection: shift target + camera by the object's motion
     if (sel && isMoving(sel)) {
       const p = worldPos(sel)
@@ -83,7 +105,7 @@ function OrbitRig() {
   }, [req])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return
+      if (e.target instanceof HTMLInputElement || useUI.getState().tour) return
       const o = useUI.getState().orbit
       const k = e.key.toLowerCase()
       if (k === 'q') o(Math.PI / 4)
@@ -169,10 +191,10 @@ function SelectionMarker() {
   if (!sel || sel.kind === 'zone') return null
   return (
     <group ref={g}>
-      <mesh geometry={chevron} position={[0, 2, -0.04]}>
+      <mesh geometry={chevron} position={[0, 2, -0.04]} raycast={() => null}>
         <meshBasicMaterial color="#38bdf8" toneMapped={false} />
       </mesh>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
         <ringGeometry args={[0.92, 1, 48]} />
         <meshBasicMaterial color="#38bdf8" toneMapped={false} transparent opacity={0.9} />
       </mesh>
@@ -212,6 +234,9 @@ function Controls({ cx }: { cx: number }) {
   )
 }
 
+/** Always render at the screen's full pixel density (capped at 2×); resolution is never reduced. */
+const DPR = Math.min(2, typeof window === 'undefined' ? 1 : window.devicePixelRatio)
+
 export function Scene() {
   const select = useUI(s => s.select)
   const B = world.L.bounds
@@ -219,14 +244,12 @@ export function Scene() {
   return (
     <Canvas
       shadows={{ type: THREE.PCFShadowMap }}
-      dpr={[1, 2]}
-      camera={{ position: [cx + 36, 84 + FLOOR_Y, 64], fov: 38, near: 0.3, far: 1200 }}
-      gl={{ antialias: true }}
+      dpr={DPR}
+      camera={{ position: [cx + 36, 84 + FLOOR_Y, 64], fov: 38, near: 0.5, far: 1200 }}
+      gl={{ antialias: true, stencil: true }}
       onPointerMissed={() => select(null)}
     >
-      <color attach="background" args={['#ffffff']} />
-      <fog attach="fog" args={['#ffffff', 220, 560]} />
-      <hemisphereLight args={['#eaf2ff', '#3b4656', 0.8]} />
+      <DayNight cx={cx} />
       {/* procedural fab ceiling (light strips) for reflections in glass and metal */}
       <Environment resolution={256} frames={1} environmentIntensity={0.55}>
         <color attach="background" args={['#1b2433']} />
@@ -236,37 +259,31 @@ export function Scene() {
         <Lightformer form="rect" intensity={0.6} color="#9fc4ff" position={[0, 4, -40]} scale={[200, 8, 1]} />
         <Lightformer form="rect" intensity={0.4} color="#ffffff" position={[0, 4, 40]} rotation-y={Math.PI} scale={[200, 8, 1]} />
       </Environment>
-      <directionalLight
-        position={[cx + 60, 110, 70]}
-        intensity={2.1}
-        castShadow
-        shadow-mapSize={[4096, 4096]}
-        shadow-camera-left={-125}
-        shadow-camera-right={125}
-        shadow-camera-top={80}
-        shadow-camera-bottom={-80}
-        shadow-camera-far={300}
-        shadow-bias={-0.0004}
-        shadow-normalBias={0.03}
-      >
-        <object3D attach="target" position={[cx, 0, 0]} />
-      </directionalLight>
-      <directionalLight position={[cx - 80, 60, -60]} intensity={0.45} />
       <SimDriver />
       <SiteLayers />
-      <group position={[0, FLOOR_Y, 0]}>
+      <Shipping />
+      <group
+        position={[0, FLOOR_Y, 0]}
+        ref={el => {
+          if (el) reflectHide.add(el)
+        }}
+      >
         <Building />
         <Equipment />
         <Transport />
         <People />
         <WarRoom />
         <Overlays />
+        <Glows />
+        <CallInLights />
         <SelectionMarker />
+        <FollowOutline />
       </group>
       <LabelProjector />
       <Controls cx={cx} />
       <CameraRig />
       <OrbitRig />
+      <TourControls />
     </Canvas>
   )
 }

@@ -11,6 +11,8 @@ export type Sel =
   | { kind: 'arv'; id: string }
   | { kind: 'tech'; id: string }
   | { kind: 'zone'; id: string }
+  | { kind: 'truck'; id: string }
+  | { kind: 'ship'; id: string }
   | null
 
 export interface FlyTarget {
@@ -48,6 +50,15 @@ interface UI {
   layers: Layers
   /** Auto-rotate the building. */
   spin: boolean
+  /** Lighting: fixed day, fixed night, or an automatic compressed day/night cycle. */
+  dayMode: 'day' | 'night' | 'auto'
+  setDayMode: (m: 'day' | 'night' | 'auto') => void
+  /** First-person walking tour of the production floor. */
+  tour: boolean
+  setTour: (v: boolean) => void
+  /** 3D-only mode: side panels and header hidden, details shown as a popup. */
+  focus: boolean
+  toggleFocus: () => void
   /** Pending camera orbit step (radians). */
   orbitReq: { az: number; pol: number; key: number } | null
   orbit: (az: number, pol?: number) => void
@@ -56,6 +67,12 @@ interface UI {
   flyTo: (target: [number, number, number], dist?: number) => void
   setWarRoom: (v: boolean) => void
   toggle: (k: keyof UI['layers']) => void
+}
+
+/** Browser fullscreen on/off (Esc in the browser exits it, see App). */
+function setBrowserFullscreen(on: boolean) {
+  if (on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {})
+  if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
 }
 
 export const useUI = create<UI>(set => ({
@@ -69,6 +86,24 @@ export const useUI = create<UI>(set => ({
     walls: true, site: true, floors: true,
   },
   spin: false,
+  focus: false,
+  tour: false,
+  // Tour and Fullscreen are separate, mutually exclusive modes. The tour uses the same
+  // full-window layout (+ browser fullscreen); leaving it always returns to the normal layout.
+  setTour: tour => {
+    if (tour === useUI.getState().tour) return
+    set({ tour, focus: tour, sel: null })
+    setBrowserFullscreen(tour)
+  },
+  dayMode: 'day',
+  setDayMode: dayMode => set({ dayMode }),
+  toggleFocus: () => {
+    // fullscreen while touring means "leave the tour"
+    if (useUI.getState().tour) return useUI.getState().setTour(false)
+    const next = !useUI.getState().focus
+    set({ focus: next })
+    setBrowserFullscreen(next)
+  },
   orbitReq: null,
   orbit: (az, pol = 0) => set({ orbitReq: { az, pol, key: Math.random() } }),
   toggleSpin: () => set(s => ({ spin: !s.spin })),
@@ -93,7 +128,7 @@ function side(z: number) {
 
 /** Vehicles and people: the camera follows them while selected. */
 export function isMoving(sel: NonNullable<Sel>) {
-  return sel.kind === 'oht' || sel.kind === 'arv' || sel.kind === 'tech'
+  return sel.kind === 'oht' || sel.kind === 'arv' || sel.kind === 'tech' || sel.kind === 'truck'
 }
 
 /** Position in world space (the factory floor sits at FLOOR_Y). */
@@ -124,6 +159,15 @@ export function positionOf(sel: NonNullable<Sel>): [number, number, number] | nu
     case 'zone': {
       const z = world.L.zones.find(x => x.proc.id === sel.id)
       return z ? [(z.x0 + z.x1) / 2, 0, z.aisleZ] : null
+    }
+    case 'truck': {
+      // trucks drive at ground level: local to the level-3 group that is FLOOR_Y below
+      const t = world.shipping.truck
+      return t && t.id === sel.id ? [t.pos[0], 1.8 - FLOOR_Y, t.pos[1]] : null
+    }
+    case 'ship': {
+      if (sel.id === 'TRUCK' && world.shipping.truck) return positionOf({ kind: 'truck', id: world.shipping.truck.id })
+      return world.shipUnits().find(u => u.id === sel.id)?.pos ?? null
     }
     case 'oht': {
       const v = world.oht.find(x => x.id === sel.id)

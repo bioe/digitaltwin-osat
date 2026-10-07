@@ -54,6 +54,14 @@ export function Performance() {
         <Kpi label="Cycle time (avg)" value={`${cycleH.toFixed(1)} h`} delta="wafer in → reel out" good />
         <Kpi label="Active alarms" value={String(k.alarm)} delta={`${aiOpen} handled by AI`} good={k.alarm < 5} />
       </div>
+      <div className="mt-1.5 flex items-center gap-3 rounded border border-sky-400/15 bg-sky-950/30 px-2 py-1 text-[11px] text-[var(--ink2)]">
+        <span>🚚 Shipped today</span>
+        <span className="num text-[14px] text-white">{w.shipping.trucks} trucks</span>
+        <span className="num text-[14px] text-white">{fmt(w.shipping.units / 1000)} K units</span>
+        <span className="ml-auto truncate">
+          {w.shipping.truck ? `${w.shipping.truck.id} · ${w.shipping.truck.pallets}/6 pallets · ${w.shipping.truck.phase}` : 'next truck due'}
+        </span>
+      </div>
       <div className="mt-2 flex min-h-0 flex-1 gap-2">
         <div className="cc-card flex min-w-0 flex-1 flex-col p-1.5">
           <div className="flex items-center justify-between px-1 text-[10.5px] text-[var(--ink2)]">

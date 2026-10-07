@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { world } from '../sim/world'
+import { decal } from './decal'
 import { Instanced } from './Instanced'
 
 const q = new THREE.Quaternion()
@@ -23,6 +24,7 @@ export function Landscape() {
   const cx = (B.x0 + B.x1) / 2
   const APRON = 6
 
+  const routes = world.truckRoutes
   const site = useMemo(() => {
     const pz = B.z1 + APRON + 6 // car park north edge
     const park = { x0: cx - 22, x1: cx + 22, z0: pz, z1: pz + 13 }
@@ -31,6 +33,10 @@ export function Landscape() {
       flat(park.x1 - park.x0, park.z1 - park.z0, cx, (park.z0 + park.z1) / 2, 0.008),
       flat(7, 6, cx, B.z1 + APRON + 3, 0.008),
       flat(7, 140, park.x1 + 3.5, park.z1 + 70 - 6.5, 0.008),
+      // service road along the back (north) and down the west side to the freight-lift truck yard
+      flat(B.x1 + 220 - (B.x0 - 23.5), 7, (B.x0 - 23.5 + B.x1 + 220) / 2, routes.zr, 0.008),
+      flat(7, routes.liftZ + 16 - routes.zr, routes.xr, (routes.zr + routes.liftZ + 16) / 2, 0.008),
+      flat(routes.liftX - 1.6 - routes.xr, 12, (routes.xr + routes.liftX - 1.6) / 2, routes.liftZ, 0.008),
     ])!
     const marks: THREE.BufferGeometry[] = []
     const stalls: { x: number; z: number; rot: number }[] = []
@@ -41,14 +47,14 @@ export function Landscape() {
       }
     }
     return { park, apron, road, marks: mergeGeometries(marks)!, stalls }
-  }, [B, cx])
+  }, [B, cx, routes])
 
   const items = useMemo(() => {
     const trees: THREE.Matrix4[] = []
     const shrubs: THREE.Matrix4[] = []
     // one clean row of rain trees north and south of the building, wide spacing
     for (let x = B.x0 + 6; x <= B.x1 - 6; x += 22) {
-      trees.push(pose(x, B.z0 - APRON - 9, x, 0.85))
+      trees.push(pose(x, B.z0 - 28, x, 0.85)) // north of the service road
       if (x < site.park.x0 - 8 || x > site.park.x1 + 8) trees.push(pose(x, B.z1 + APRON + 9, x, 0.85))
     }
     // low planting along the south apron edge
@@ -73,13 +79,13 @@ export function Landscape() {
         <meshStandardMaterial color="#c4dbb0" roughness={1} />
       </mesh>
       <mesh geometry={site.apron} receiveShadow>
-        <meshStandardMaterial color="#e6e8eb" roughness={0.9} />
+        <meshStandardMaterial color="#e6e8eb" roughness={0.9} {...decal(1)} />
       </mesh>
       <mesh geometry={site.road} receiveShadow>
-        <meshStandardMaterial color="#8a9099" roughness={0.95} />
+        <meshStandardMaterial color="#8a9099" roughness={0.95} {...decal(2)} />
       </mesh>
       <mesh geometry={site.marks}>
-        <meshBasicMaterial color="#ffffff" />
+        <meshBasicMaterial color="#ffffff" {...decal(3)} />
       </mesh>
       {inst('rainTree', items.trees)}
       {inst('shrub', items.shrubs)}

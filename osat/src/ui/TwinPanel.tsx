@@ -1,6 +1,5 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { PROCESSES } from '../data/processes'
-import { FLOOR_Y } from '../layout/layout'
 import { MODE_TINT } from '../scene/Building'
 import { STATUS_HEX } from '../scene/materials'
 import { useTick, useUI, type Layers } from '../store'
@@ -62,14 +61,12 @@ export function TwinPanel({ children }: { children: ReactNode }) {
   const flyTo = useUI(s => s.flyTo)
   const select = useUI(s => s.select)
   const sel = useUI(s => s.sel)
-  const [mode, setMode] = useState<'3D' | '2D'>('3D')
-  const B = w.L.bounds
-  const cx = (B.x0 + B.x1) / 2
-  const setView = (m: '3D' | '2D') => {
-    setMode(m)
-    if (m === '2D') useUI.setState({ fly: { target: [cx, FLOOR_Y, 0], offset: [0, 175, 0.01], key: Math.random() } })
-    else flyTo([cx, 0, 0], 2)
-  }
+  const dayMode = useUI(s => s.dayMode)
+  const setDayMode = useUI(s => s.setDayMode)
+  const focus = useUI(s => s.focus)
+  const toggleFocus = useUI(s => s.toggleFocus)
+  const tour = useUI(s => s.tour)
+  const setTour = useUI(s => s.setTour)
   return (
     <section className="cc-panel flex min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="flex items-center gap-3 px-2.5 pt-2">
@@ -94,7 +91,34 @@ export function TwinPanel({ children }: { children: ReactNode }) {
               </button>
             )
           })}
+          {(() => {
+            const ship = w.shipUnits()
+            const st = ship.some(u => u.state === 'alarm') ? 'alarm' : ship.some(u => u.state === 'idle') ? 'idle' : 'run'
+            const active = sel?.kind === 'ship' || (sel?.kind === 'tool' && (sel.id === 'PACK-01' || sel.id === 'WRAP-01'))
+            return (
+              <button
+                className={`cc-tab flex shrink-0 items-center gap-1.5 rounded border px-2 py-1 ${active ? 'border-sky-400 bg-sky-400/20' : 'border-sky-400/15 bg-sky-950/40 hover:bg-sky-400/10'}`}
+                onClick={() => {
+                  select({ kind: 'tool', id: 'PACK-01' })
+                  flyTo(ship[0].pos, 0.45)
+                }}
+              >
+                <span className="inline-block h-[7px] w-[7px] rounded-full" style={{ background: STATUS_HEX[st], boxShadow: `0 0 6px ${STATUS_HEX[st]}` }} />
+                SHIP
+              </button>
+            )
+          })()}
         </div>
+        {tour && (
+          <button className="btn on shrink-0 !px-2.5" title="Leave the walking tour (Esc)" onClick={() => setTour(false)}>
+            ✕ Exit tour
+          </button>
+        )}
+        {focus && !tour && (
+          <button className="btn on shrink-0 !px-2.5" title="Exit fullscreen (F / Esc)" onClick={toggleFocus}>
+            ⤡ Exit fullscreen
+          </button>
+        )}
       </div>
       <div className="relative m-2 mt-1 min-h-0 flex-1 overflow-hidden rounded border border-sky-400/20">{children}</div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-sky-400/15 px-3 py-1.5">
@@ -114,12 +138,20 @@ export function TwinPanel({ children }: { children: ReactNode }) {
             ))}
           </div>
         ))}
-        <div className="ml-auto flex overflow-hidden rounded border border-sky-400/40">
-          {(['3D', '2D'] as const).map(m => (
-            <button key={m} className={`px-2.5 py-0.5 text-[11px] font-semibold ${mode === m ? 'bg-sky-400/30 text-white' : 'text-[var(--ink2)] hover:bg-white/5'}`} onClick={() => setView(m)}>
-              {m}
-            </button>
-          ))}
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[9.5px] uppercase tracking-[0.14em] text-[var(--ink3)]">Light</span>
+          <div className="flex overflow-hidden rounded border border-sky-400/40">
+            {([['day', '☀ Day'], ['night', '☾ Night'], ['auto', '◐ Auto']] as const).map(([m, label]) => (
+              <button
+                key={m}
+                className={`px-2.5 py-0.5 text-[11px] font-semibold ${dayMode === m ? 'bg-sky-400/30 text-white' : 'text-[var(--ink2)] hover:bg-white/5'}`}
+                title={m === 'auto' ? 'Compressed day/night cycle (2 min)' : m === 'night' ? 'Lights-out night shift: no people, only machine glows' : 'Day shift'}
+                onClick={() => setDayMode(m)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </section>

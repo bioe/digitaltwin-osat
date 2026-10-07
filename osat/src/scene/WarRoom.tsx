@@ -2,10 +2,11 @@ import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { MEZZ_Y } from '../layout/layout'
+import { FLOOR_Y, MEZZ_Y } from '../layout/layout'
 import { world } from '../sim/world'
 import { useUI } from '../store'
 import { Instanced, setPose } from './Instanced'
+import { decal } from './decal'
 import { glassMaterial } from './materials'
 import { useScreens } from './wallPanels'
 
@@ -43,6 +44,53 @@ function brickTex(rx: number, ry: number) {
   }, rx, ry)
 }
 
+/** Height maps are data, not colour. */
+function linear(t: THREE.Texture) {
+  t.colorSpace = THREE.NoColorSpace
+  return t
+}
+
+/** Brick relief: mortar joints recessed, faces slightly rough. */
+function brickBump(rx: number, ry: number) {
+  return canvasTex(256, 256, g => {
+    g.fillStyle = '#000'
+    g.fillRect(0, 0, 256, 256)
+    const bw = 64
+    const bh = 21
+    for (let r = 0; r < 256 / bh + 1; r++) {
+      for (let k = -1; k < 5; k++) {
+        const x = k * bw + (r % 2) * (bw / 2)
+        g.fillStyle = '#c8c8c8'
+        g.fillRect(x + 2, r * bh + 2, bw - 4, bh - 4)
+        // rough face: speckle
+        for (let i = 0; i < 18; i++) {
+          const v = 170 + Math.floor(Math.random() * 70)
+          g.fillStyle = `rgb(${v},${v},${v})`
+          g.fillRect(x + 3 + Math.random() * (bw - 8), r * bh + 3 + Math.random() * (bh - 8), 2 + Math.random() * 4, 1 + Math.random() * 2)
+        }
+      }
+    }
+  }, rx, ry)
+}
+
+/** Oak relief: plank seams and end joints recessed, fine grain. */
+function oakBump(rx: number, ry: number) {
+  return canvasTex(256, 256, g => {
+    g.fillStyle = '#b4b4b4'
+    g.fillRect(0, 0, 256, 256)
+    for (let i = 0; i < 8; i++) {
+      for (let k = 0; k < 7; k++) {
+        const v = 160 + Math.floor(Math.random() * 50)
+        g.fillStyle = `rgb(${v},${v},${v})`
+        g.fillRect(0, i * 32 + 4 + k * 4, 256, 1)
+      }
+      g.fillStyle = '#000'
+      g.fillRect(0, i * 32, 256, 2)
+      g.fillRect(((i * 97) % 200) + 20, i * 32, 2, 32)
+    }
+  }, rx, ry)
+}
+
 /** Wide-plank light oak floor. */
 function oakTex(rx: number, ry: number) {
   return canvasTex(256, 256, g => {
@@ -73,17 +121,27 @@ export function WarRoom() {
   const D = wr.z1 - wr.z0
   const screens = useScreens()
   const acc = useRef(10)
-  useFrame((_, dt) => {
+  // redraw one screen at a time (round robin, ≈0.6 s each) and only when the camera is near enough
+  // to read it: each redraw is a multi-megapixel canvas upload, so doing all four at once causes a hitch
+  const next = useRef(0)
+  const first = useRef(true)
+  useFrame(({ camera }, dt) => {
     acc.current += dt
-    if (acc.current < 1) return
+    if (acc.current < 0.6 && !first.current) return
     acc.current = 0
-    for (const s of screens) {
+    const d = camera.position.distanceTo(new THREE.Vector3(cx, FLOOR_Y + MEZZ_Y + 1.8, wr.z0))
+    if (d > 70 && !first.current) return
+    const list = first.current ? screens : [screens[next.current++ % screens.length]]
+    first.current = false
+    for (const s of list) {
       s.draw(s.c.getContext('2d')!)
       s.tex.needsUpdate = true
     }
   })
   const brick = useMemo(() => brickTex(W / 2.6, H / 1.3), [W])
   const oak = useMemo(() => oakTex(W / 2.4, D / 2.4), [W, D])
+  const brickB = useMemo(() => linear(brickBump(W / 2.6, H / 1.3)), [W])
+  const oakB = useMemo(() => linear(oakBump(W / 2.4, D / 2.4)), [W, D])
 
   // black steel: crittall glazing grid, roof beams, door frame
   const steel = useMemo(() => {
@@ -98,18 +156,13 @@ export function WarRoom() {
     pane(W, cx, wr.z1, true)
     for (let x = wr.x0; x <= wr.x1 + 0.01; x += 1.0) boxAt(g, 0.05, H, 0.07, x, H / 2, wr.z1)
     for (const y of [0.05, 1.1, 2.4, H]) boxAt(g, W, 0.06, 0.08, cx, y, wr.z1)
-    // east glass wall; door (z 0.0–1.3) has its own glass leaf and a glass transom above
+    // east glass wall; open doorway (z 0.0–1.3) at the top of the stair, glass transom above
     pane(-wr.z0, wr.x1, wr.z0 / 2, false)
     pane(wr.z1 - 1.3, wr.x1, (1.3 + wr.z1) / 2, false)
     pane(1.3, wr.x1, 0.65, false, H - 2.3, 2.3 + (H - 2.3) / 2) // transom
-    pane(1.2, wr.x1 - 0.06, 0.65, false, 2.25, 1.125) // door leaf (set back a little)
-    boxAt(g, 0.04, 0.04, 0.5, wr.x1 - 0.12, 1.1, 0.9) // pull handle
     for (let z = wr.z0; z <= wr.z1 + 0.01; z += 1.0) if (z < -0.05 || z > 1.35) boxAt(g, 0.07, H, 0.05, wr.x1, H / 2, z)
     for (const z of [0, 1.3]) boxAt(g, 0.1, H, 0.1, wr.x1, H / 2, z)
     boxAt(g, 0.1, 0.1, 1.4, wr.x1, 2.3, 0.65)
-    // door leaf frame
-    for (const z of [0.06, 1.24]) boxAt(g, 0.05, 2.25, 0.05, wr.x1 - 0.06, 1.125, z)
-    for (const y of [0.03, 2.22]) boxAt(g, 0.05, 0.05, 1.2, wr.x1 - 0.06, y, 0.65)
     for (const y of [0.05, 2.4, H]) {
       boxAt(g, 0.08, 0.06, -wr.z0, wr.x1, y, wr.z0 / 2)
       boxAt(g, 0.08, 0.06, wr.z1 - 1.3, wr.x1, y, (1.3 + wr.z1) / 2)
@@ -148,7 +201,7 @@ export function WarRoom() {
       desks: desks.map(d => m(d.x, 0, dz(d.r), d.r)),
       seats: desks.map(d => m(d.x + Math.sin(d.r) * 1.0, 0, dz(d.r) + Math.cos(d.r) * 1.0, d.r + Math.PI)),
       sofa: [m(wr.x0 + 2.6, 0, wr.z1 - 1.0, Math.PI)],
-      rug: [m(wr.x0 + 2.6, 0.005, wr.z1 - 1.9)],
+      rug: [m(wr.x0 + 2.6, 0.035, wr.z1 - 1.9)],
       table: [m(wr.x0 + 2.6, 0, wr.z1 - 2.2)],
       high: [m(wr.x1 - 2.4, 0, wr.z1 - 1.9)],
       standing: [m(wr.x1 - 2.4, 0, wr.z1 - 1.0, Math.PI), m(wr.x1 - 3.5, 0, wr.z1 - 1.9, Math.PI / 2)],
@@ -193,6 +246,7 @@ export function WarRoom() {
       fill={(i, x) => {
         x.m.copy(list[i])
         if (person) {
+          x.visible = world.staffed
           x.t = world.t
           x.phase = i * 0.37
           x.u = [0]
@@ -208,12 +262,12 @@ export function WarRoom() {
       <group position={[0, MEZZ_Y, 0]}>
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.02, 0]} receiveShadow>
           <planeGeometry args={[W, D]} />
-          <meshStandardMaterial map={oak} roughness={0.55} />
+          <meshStandardMaterial map={oak} bumpMap={oakB} bumpScale={1.2} roughness={0.55} {...decal(2)} />
         </mesh>
         {/* exposed brick wall carrying the video wall */}
-        <mesh position={[cx, H / 2, wr.z0 - 0.12]} castShadow receiveShadow onClick={open}>
+        <mesh position={[cx, H / 2, wr.z0 - 0.12]} castShadow receiveShadow>
           <boxGeometry args={[W, H, 0.24]} />
-          <meshStandardMaterial map={brick} roughness={0.9} />
+          <meshStandardMaterial map={brick} bumpMap={brickB} bumpScale={3.5} roughness={0.9} />
         </mesh>
         {/* vertical garden */}
         <mesh position={[wr.x0 + 0.05, H / 2, 0]} receiveShadow>
@@ -226,7 +280,7 @@ export function WarRoom() {
         <mesh geometry={garden.b}>
           <meshStandardMaterial color="#7bbf54" roughness={0.9} />
         </mesh>
-        <mesh geometry={steel.glass} material={WR_GLASS} onClick={open} />
+        <mesh geometry={steel.glass} material={WR_GLASS} />
         <mesh geometry={steel.steel} castShadow>
           <meshStandardMaterial color="#1c1f24" roughness={0.45} metalness={0.6} />
         </mesh>
@@ -239,7 +293,8 @@ export function WarRoom() {
                 <meshStandardMaterial color="#0b0d10" roughness={0.4} />
               </mesh>
             )}
-            <mesh onClick={open}>
+            {/* only the screens themselves open the full-screen war-room view */}
+            <mesh onClick={s.key === 'title' ? undefined : open}>
               <planeGeometry args={[w, h]} />
               <meshBasicMaterial map={s.tex} toneMapped={false} transparent={s.key === 'title'} />
             </mesh>
@@ -256,6 +311,7 @@ export function WarRoom() {
         {inst('pottedFig', P.figs)}
         {inst('pottedMonstera', P.monsteras)}
         {inst('pendantLamp', P.pendants)}
+        <RoomLighting />
       </group>
     </group>
   )
@@ -314,6 +370,60 @@ function Mezzanine() {
       <mesh geometry={geo.treads} castShadow>
         <meshStandardMaterial color="#c49a6c" roughness={0.55} />
       </mesh>
+    </group>
+  )
+}
+
+const LED = new THREE.MeshBasicMaterial({ color: '#5eead4', toneMapped: false })
+const LINEAR = new THREE.MeshBasicMaterial({ color: '#f5f9ff', toneMapped: false })
+
+/**
+ * War-room illumination: warm pools under the pendants, blue-white spill from the video wall,
+ * linear LED fixtures between the roof beams and cyan cove strips (glass base, brick top, desk fronts).
+ * Stays on at night, so the control room is the one lit space in the lights-out hall.
+ */
+function RoomLighting() {
+  const wr = world.L.warRoom
+  const cx = (wr.x0 + wr.x1) / 2
+  const W = wr.x1 - wr.x0
+  const D = wr.z1 - wr.z0
+  const deskZ = wr.z0 + 3.2
+  const geo = useMemo(() => {
+    const led: THREE.BufferGeometry[] = []
+    const lin: THREE.BufferGeometry[] = []
+    // cove strip along the base of the south and east glass walls
+    boxAt(led, W - 0.2, 0.03, 0.04, cx, 0.05, wr.z1 - 0.08)
+    boxAt(led, 0.04, 0.03, D - 0.2, wr.x1 - 0.08, 0.05, 0)
+    // up-light strip along the top of the brick wall
+    boxAt(led, W - 0.4, 0.03, 0.04, cx, H - 0.06, wr.z0 + 0.02)
+    // under-desk glow strips (front edge of each console)
+    for (const [x, r] of [[cx - 2.55, 0.2], [cx, 0], [cx + 2.55, -0.2]] as const) {
+      const z = deskZ + Math.abs(r) * 1.2
+      const g = new THREE.BoxGeometry(2.2, 0.025, 0.03)
+      g.rotateY(r)
+      g.translate(x + Math.sin(r) * 0.52, 0.1, z + Math.cos(r) * 0.52)
+      led.push(g)
+    }
+    // linear LED fixtures hung between the roof beams
+    for (let x = wr.x0 + 1; x < wr.x1 - 0.5; x += 2) {
+      for (const z of [wr.z0 + 2.2, wr.z1 - 2.2]) {
+        boxAt(lin, 1.4, 0.04, 0.12, x, H - 0.25, z)
+        boxAt(led, 0.01, 0.25, 0.01, x - 0.6, H - 0.12, z)
+        boxAt(led, 0.01, 0.25, 0.01, x + 0.6, H - 0.12, z)
+      }
+    }
+    return { led: mergeGeometries(led)!, lin: mergeGeometries(lin)! }
+  }, [W, D, cx, wr, deskZ])
+  return (
+    <group>
+      <mesh geometry={geo.led} material={LED} raycast={() => null} />
+      <mesh geometry={geo.lin} material={LINEAR} raycast={() => null} />
+      {/* warm pools under the desk pendants and the stand-up table */}
+      {/* one warm pool over the console row (each point light costs on every lit pixel) */}
+      <pointLight position={[cx, H - 1.3, deskZ + 0.4]} color="#ffcf8a" intensity={14} distance={9} decay={1.6} />
+      {/* soft spill from the video wall and the ceiling fixtures */}
+      <pointLight position={[cx, 1.9, wr.z0 + 1.6]} color="#9cc8ff" intensity={6} distance={8} decay={2} />
+      <pointLight position={[cx, H - 0.5, wr.z1 - 2.4]} color="#eef5ff" intensity={6} distance={9} decay={2} />
     </group>
   )
 }

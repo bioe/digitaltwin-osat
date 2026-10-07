@@ -18,6 +18,7 @@ import { operator, officeWorker, seatedWorker } from './people'
 import { consoleDesk, chair, conveyorLift } from './warroom'
 import { workbench, wipRack, partsCabinet } from './props'
 import { pottedFig, pottedMonstera, sofa, coffeeTable, rug, pendantLamp, highTable } from './interior'
+import { carton, packStation, pallet, palletBase, stretchWrapper, truck } from './logistics'
 import { rainTree, columnTree, palm, shrub, hedge, carWhite, carGrey, carBlue, streetLight } from './landscape'
 
 export const MODELS: Record<string, ModelDef> = Object.fromEntries(
@@ -28,6 +29,7 @@ export const MODELS: Record<string, ModelDef> = Object.fromEntries(
     operator, officeWorker, seatedWorker, consoleDesk, chair, conveyorLift,
     workbench, wipRack, partsCabinet,
     pottedFig, pottedMonstera, sofa, coffeeTable, rug, pendantLamp, highTable,
+    truck, pallet, palletBase, carton, packStation, stretchWrapper,
     rainTree, columnTree, palm, shrub, hedge, carWhite, carGrey, carBlue, streetLight,
   ].map(m => [m.key, m]),
 )

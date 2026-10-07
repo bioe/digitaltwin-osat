@@ -5,6 +5,7 @@ import { AISLE_HALF, ARV_LANE, WALL_H } from '../layout/layout'
 import { world } from '../sim/world'
 import { useUI } from '../store'
 import { Instanced, setPose } from './Instanced'
+import { decal } from './decal'
 import { MATERIALS, glassMaterial } from './materials'
 
 const ROOM_GLASS = glassMaterial()
@@ -97,7 +98,10 @@ export function Building() {
     const cols: THREE.BufferGeometry[] = []
     const beams: THREE.BufferGeometry[] = []
     walls.push(boxAt(W, 1.4, 0.3, cx, 0.7, B.z0), boxAt(W, 1.4, 0.3, cx, 0.7, B.z1))
-    walls.push(boxAt(0.3, 1.4, D, B.x0, 0.7, cz), boxAt(0.3, 1.4, D, B.x1, 0.7, cz))
+    // west parapet has an opening at the freight lift (z = 9.5 ± 1.6) for the pallet conveyor
+    const lz = world.truckRoutes.liftZ
+    walls.push(boxAt(0.3, 1.4, lz - 1.6 - B.z0, B.x0, 0.7, (B.z0 + lz - 1.6) / 2), boxAt(0.3, 1.4, B.z1 - lz - 1.6, B.x0, 0.7, (lz + 1.6 + B.z1) / 2))
+    walls.push(boxAt(0.3, 1.4, D, B.x1, 0.7, cz))
     // cut-away shell: column stubs only, so the camera can look in from any side
     for (let x = B.x0; x <= B.x1 + 0.1; x += 12) cols.push(boxAt(0.6, 1.8, 0.6, x, 0.9, B.z0), boxAt(0.6, 1.8, 0.6, x, 0.9, B.z1))
     for (const x of [B.x0, B.x1]) for (let z = B.z0 + 10.7; z < B.z1 - 1; z += 10.7) cols.push(boxAt(0.6, 1.8, 0.6, x, 0.9, z))
@@ -135,14 +139,43 @@ export function Building() {
         pipes.tray.push(boxAt(len, 0.06, 0.32, mx, 2.42, wz + dz * 1.2))
       }
     }
+    // utility drops: from each wall header, run horizontally to above the machine's back edge,
+    // then drop onto the machine top (CDA = steel, PCW = blue, N2 = yellow)
+    const HEADER: Record<'steel' | 'blue' | 'yellow', { y: number; k: number }> = {
+      steel: { y: 2.05, k: 1 },
+      blue: { y: 2.18, k: 1.4 },
+      yellow: { y: 2.3, k: 1.7 },
+    }
     for (const t of world.tools) {
+      if (t.ship) continue // packing area has no utility header
       const z = zones.find(q => q.proc.id === t.proc)!
       const wz = t.side === -1 ? z.z0 : z.z1
       const dz = t.side === -1 ? 0.25 : -0.25
+      const back = t.side === -1 ? t.pos[2] - t.size[1] / 2 + 0.15 : t.pos[2] + t.size[1] / 2 - 0.15
+      const top = t.size[2] * 0.85
       for (const [k, dx] of [['steel', -0.25], ['blue', 0.0], ['yellow', 0.2]] as const) {
-        const g = new THREE.CylinderGeometry(0.025, 0.025, 2.1 - t.size[2] * 0.6, 6)
-        g.translate(t.pos[0] + dx, (2.1 + t.size[2] * 0.6) / 2, wz + dz * (k === 'steel' ? 1 : k === 'blue' ? 1.4 : 1.7))
-        pipes[k].push(g)
+        const { y, k: kz } = HEADER[k]
+        const hz = wz + dz * kz // header line this pipe tees off
+        const x = t.pos[0] + dx
+        const run = Math.abs(back - hz)
+        if (run > 0.02) {
+          const h = new THREE.CylinderGeometry(0.022, 0.022, run, 6)
+          h.rotateX(Math.PI / 2)
+          h.translate(x, y, (back + hz) / 2)
+          pipes[k].push(h)
+        }
+        const drop = y - top
+        if (drop > 0.05) {
+          const v = new THREE.CylinderGeometry(0.022, 0.022, drop, 6)
+          v.translate(x, top + drop / 2, back)
+          pipes[k].push(v)
+          const elbow = new THREE.SphereGeometry(0.03, 6, 4)
+          elbow.translate(x, y, back)
+          pipes[k].push(elbow)
+          const flange = new THREE.CylinderGeometry(0.045, 0.045, 0.03, 8)
+          flange.translate(x, top + 0.015, back)
+          pipes[k].push(flange)
+        }
       }
     }
     return {
@@ -166,7 +199,7 @@ export function Building() {
     }
     // corridor: ARV lanes (yellow dashes) and a green pedestrian walkway
     for (let x = B.x0 + 2; x < B.x1 - 2; x += 2) {
-      for (const lz of [ARV_LANE + 0.45, ARV_LANE - 0.45]) yellow.push(boxAt(1.0, 0.012, 0.07, x, 0.012, lz))
+      for (const lz of [ARV_LANE + 0.8, ARV_LANE, ARV_LANE - 0.8]) yellow.push(boxAt(1.0, 0.012, 0.07, x, 0.012, lz))
     }
     green.push(boxAt(W - 4, 0.01, 1.2, cx, 0.011, -1.4))
     return { yellow: mergeGeometries(yellow)!, green: mergeGeometries(green)! }
@@ -187,14 +220,14 @@ export function Building() {
       {zones.map(z => (
         <mesh key={z.proc.id} rotation={[-Math.PI / 2, 0, 0]} position={[(z.x0 + z.x1) / 2, 0.006, (z.z0 + z.z1) / 2]} receiveShadow onClick={pick(z.proc.id)}>
           <planeGeometry args={[z.x1 - z.x0 - 0.2, z.z1 - z.z0]} />
-          <meshStandardMaterial color={MODE_TINT[z.proc.mode]} transparent opacity={0.12} roughness={0.9} depthWrite={false} />
+          <meshStandardMaterial color={MODE_TINT[z.proc.mode]} transparent opacity={0.12} roughness={0.9} depthWrite={false} {...decal(1)} />
         </mesh>
       ))}
       <mesh geometry={lines.yellow}>
-        <meshBasicMaterial color="#f5c400" />
+        <meshBasicMaterial color="#f5c400" {...decal(2)} />
       </mesh>
       <mesh geometry={lines.green}>
-        <meshBasicMaterial color="#1f9d55" transparent opacity={0.35} />
+        <meshBasicMaterial color="#1f9d55" transparent opacity={0.35} {...decal(1)} />
       </mesh>
       {walls && (
         <group>

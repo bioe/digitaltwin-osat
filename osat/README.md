@@ -17,5 +17,7 @@ npm run build:osat
 - **Status colours**: green = production, yellow = idle, red = alarm / stopped (blinking).
 - **Building**: the production floor is level 3 (12 m up) above two dummy levels (glazed L1 with entrance and docks, clad L2). Simple site: lawn, apron, access road, car park, tree line.
 - **War room**: compact loft-style room (brick wall, oak floor, black steel glazing, green wall, plants) on a mezzanine above the corridor. The **WAR ROOM** button shows the same six video-wall screens full size; click the floor map or an alarm to go there.
+- **Shipping**: an ARV takes finished lots from S11 to the box-packing station. Cartons ride a belt to the pallet build position, where a gantry picker stacks them. The pallet rolls through an in-line stretch-wrapper onto a buffer conveyor. Wrapped pallets go down an exterior freight lift on the west façade, and roll into a truck reversed up to the lift at dock height. Trucks use the north and west service roads and leave with 6 pallets.
+- **Material handling**: 10 OHT and 8 ARV. Lots go tool-to-tool directly when the next tool is ready; free vehicles take the nearest job, with priority for tools that run dry; ARVs charge at transfer ports.
 - **Traffic**: ARVs keep right and stop to give way to other ARVs and people; conveyor carriers queue; OHT vehicles keep spacing on the rail.
 - **Follow**: selecting a vehicle or a person makes the camera follow it.
