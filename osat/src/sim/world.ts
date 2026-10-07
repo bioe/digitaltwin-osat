@@ -17,14 +17,43 @@ export interface Lot {
   carrier: CarrierKey
 }
 
+export type Severity = 'High' | 'Medium' | 'Low'
+
+/** AI auto-recovery pipeline: 0 detect → 1 diagnose → 2 plan → 3 execute → 4 resolved. */
+export interface AiRecovery {
+  stage: number
+  t: number
+  action: string
+}
+
 export interface Alarm {
   code: string
   text: string
   soft: boolean
+  severity: Severity
   tool: string
+  proc: ProcId
   at: number
   cleared?: number
   by?: string
+  ai?: AiRecovery
+}
+
+export const AI_STAGES = ['Detect anomaly', 'AI diagnosis', 'Generate recovery plan', 'Execute & validate', 'Resolved · auto close']
+const AI_STAGE_S = [1.5, 3, 2.5, 4]
+
+const AI_ACTIONS: Record<string, string[]> = {
+  sort: ['Wafer re-align & retry', 'Chuck vacuum purge'],
+  grind: ['Thickness offset auto-correct', 'Chuck re-clamp'],
+  saw: ['Auto kerf calibration', 'Coolant flow re-balance'],
+  da: ['Ejector height re-teach', 'Placement offset auto-calibration', 'Wafer map re-load'],
+  wb: ['Bond parameter auto-tuning', 'Tail length re-optimise', 'Re-bond & resume'],
+  mold: ['Loader jam auto-clear', 'Degate re-cycle'],
+  mark: ['OCV re-inspection & re-mark'],
+  pkgsaw: ['Pick-up nozzle re-teach', 'Vision threshold auto-tune'],
+  test: ['Handler auto-recovery', 'Bin limit re-evaluation'],
+  fvi: ['Vision recipe re-tune', 'Nozzle vacuum purge'],
+  tnr: ['Auto reel change', 'Splice skip & resume', 'Pocket re-fill'],
 }
 
 export interface Tool extends ToolPlace {
@@ -187,7 +216,8 @@ export class World {
   convSeq = 1
   done = { OHT: 0, CONV: 0, ARV: 0 }
   doneLog: { t: number; mode: Mode; dur: number }[] = []
-  speed = 1
+  /** Simulation speed (fixed; the UI has no speed control). */
+  speed = 2
   version = 0
 
   constructor() {
@@ -302,7 +332,11 @@ export class World {
   raise(t: Tool) {
     const key = (t.aux ? t.model : t.proc) as keyof typeof ALARMS
     const [code, text, soft] = pick(ALARMS[key] ?? ALARMS.wb)
-    const a: Alarm = { code, text, soft, tool: t.id, at: this.clock }
+    const low = /reel full|splice|empty pocket|calibration expired|spool empty/i.test(text)
+    const severity: Severity = !soft ? 'High' : low ? 'Low' : 'Medium'
+    const a: Alarm = { code, text, soft, severity, tool: t.id, proc: t.proc, at: this.clock }
+    // most soft alarms are handled by the AI virtual operator without a person
+    if (soft && Math.random() < 0.65) a.ai = { stage: 0, t: 0, action: pick(AI_ACTIONS[t.proc] ?? ['Parameter tuning']) }
     t.alarm = a
     t.state = 'alarm'
     t.reason = text
@@ -558,6 +592,15 @@ export class World {
         }
       } else {
         t.alarmS += dt
+        const ai = t.alarm?.ai
+        if (ai && ai.stage < 4) {
+          ai.t += dt
+          if (ai.t >= AI_STAGE_S[ai.stage]) {
+            ai.t = 0
+            ai.stage++
+            if (ai.stage === 4) this.clear(t, `AI auto recovery · ${ai.action}`)
+          }
+        }
       }
       if (t.aux && t.state === 'run' && Math.random() < dt / 300) {
         t.state = 'idle'
@@ -937,7 +980,7 @@ export class World {
   private planFor(w: Worker) {
     const zoneTools = this.tools.filter(t => t.proc === w.zone)
     if (w.role === 'operator') {
-      const soft = zoneTools.find(t => t.alarm?.soft && !t.tech)
+      const soft = zoneTools.find(t => t.alarm?.soft && !t.alarm.ai && !t.tech)
       if (soft) {
         this.claim(w, soft)
         const sp = this.spot(soft)
@@ -983,7 +1026,7 @@ export class World {
       return
     }
     // technicians
-    const hard = this.tools.find(t => t.alarm && !t.tech && (!t.alarm.soft || this.clock - t.alarm.at > 45000))
+    const hard = this.tools.find(t => t.alarm && !t.alarm.ai && !t.tech && (!t.alarm.soft || this.clock - t.alarm.at > 45000))
     if (hard) {
       this.claim(w, hard)
       const sp = this.spot(hard)
@@ -1019,7 +1062,7 @@ export class World {
         const urgent =
           w.role === 'tech'
             ? this.tools.some(t => t.alarm && !t.tech && !t.alarm.soft)
-            : this.tools.some(t => t.proc === w.zone && t.alarm?.soft && !t.tech)
+            : this.tools.some(t => t.proc === w.zone && t.alarm?.soft && !t.alarm.ai && !t.tech)
         if (urgent) this.abort(w)
       }
       if (!w.plan.length) {

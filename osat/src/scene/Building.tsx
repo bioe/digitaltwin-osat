@@ -80,6 +80,7 @@ function wall(parts: WallParts, ax: number, az: number, bx: number, bz: number) 
 }
 
 export function Building() {
+  const walls = useUI(s => s.layers.walls)
   const { bounds: B, zones } = world.L
   const W = B.x1 - B.x0
   const D = B.z1 - B.z0
@@ -195,6 +196,8 @@ export function Building() {
       <mesh geometry={lines.green}>
         <meshBasicMaterial color="#1f9d55" transparent opacity={0.35} />
       </mesh>
+      {walls && (
+        <group>
       <mesh geometry={rooms.solid} castShadow receiveShadow>
         <meshStandardMaterial color="#e9edf2" roughness={0.6} />
       </mesh>
@@ -212,6 +215,8 @@ export function Building() {
       <mesh geometry={rooms.tray}>
         <meshStandardMaterial color="#4b5563" roughness={0.6} metalness={0.4} />
       </mesh>
+        </group>
+      )}
       <mesh geometry={shell.walls} castShadow receiveShadow>
         <meshStandardMaterial color="#dfe4ea" roughness={0.7} />
       </mesh>

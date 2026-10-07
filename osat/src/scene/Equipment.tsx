@@ -1,10 +1,15 @@
 import { useFrame } from '@react-three/fiber'
 import { useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { bake } from '../models/dsl'
+import { MODELS } from '../models'
 import { world, type Tool } from '../sim/world'
 import { useUI } from '../store'
 import { Instanced, setPose } from './Instanced'
 import { STATUS } from './materials'
+
+const AI_COLOR = new THREE.Color('#fbbf24')
 
 function ToolGroup({ model, tools }: { model: string; tools: Tool[] }) {
   const select = useUI(s => s.select)
@@ -45,14 +50,17 @@ function StatusPads({ tools }: { tools: Tool[] }) {
   const c = useMemo(() => new THREE.Color(), [])
   useFrame(({ clock }) => {
     const T = clock.elapsedTime
+    const L = useUI.getState().layers
     tools.forEach((t, i) => {
+      const ai = !!t.alarm?.ai
+      const show = ai ? L.ai : t.state === 'run' ? L.run : t.state === 'idle' ? L.idle : L.down
       obj.position.set(t.pos[0], 0.02, t.pos[2])
       obj.rotation.set(0, t.rotY, 0)
-      obj.scale.set(t.size[0] + 0.5, 1, t.size[1] + 0.5)
+      obj.scale.set(show ? t.size[0] + 0.5 : 0, 1, show ? t.size[1] + 0.5 : 0)
       obj.updateMatrix()
       ring.current?.setMatrixAt(i, obj.matrix)
       fill.current?.setMatrixAt(i, obj.matrix)
-      c.copy(STATUS[t.state])
+      c.copy(ai ? AI_COLOR : STATUS[t.state])
       if (t.state === 'alarm') c.multiplyScalar(0.55 + 0.45 * Math.abs(Math.sin(T * 4)))
       ring.current?.setColorAt(i, c)
       fill.current?.setColorAt(i, c)
@@ -90,6 +98,9 @@ export function Equipment() {
         <ToolGroup key={model} model={model} tools={tools} />
       ))}
       <StatusPads tools={world.tools} />
+      {groups.map(([model, tools]) => (
+        <AlarmHalo key={`halo-${model}`} model={model} tools={tools} />
+      ))}
       <Stockers />
     </group>
   )
@@ -127,6 +138,56 @@ function Stockers() {
           />
         )
       })}
+    </group>
+  )
+}
+
+/** Inverted-hull outline + pulsing glow shell around every machine that is in alarm (red) or AI recovery (amber). */
+function AlarmHalo({ model, tools }: { model: string; tools: Tool[] }) {
+  const hull = useMemo(() => {
+    const b = bake(MODELS[model])
+    const list = [...b.byMat.values()].map(g => g.clone())
+    return mergeGeometries(list)!
+  }, [model])
+  const line = useRef<THREE.InstancedMesh>(null)
+  const glow = useRef<THREE.InstancedMesh>(null)
+  const obj = useMemo(() => new THREE.Object3D(), [])
+  const red = useMemo(() => new THREE.Color('#ff2a3d'), [])
+  const amber = useMemo(() => new THREE.Color('#fbbf24'), [])
+  useFrame(({ clock }) => {
+    const pulse = 0.5 + 0.5 * Math.sin(clock.elapsedTime * 5)
+    let n = 0
+    for (const t of tools) {
+      if (!t.alarm) continue
+      const c = t.alarm.ai ? amber : red
+      for (const [ref, th] of [[line, 0.035], [glow, 0.16 + pulse * 0.08]] as const) {
+        const m = ref.current
+        if (!m) continue
+        obj.position.set(t.pos[0], -th * 0.5, t.pos[2])
+        obj.rotation.set(0, t.rotY, 0)
+        obj.scale.set(1 + (2 * th) / t.size[0], 1 + th / t.size[2], 1 + (2 * th) / t.size[1])
+        obj.updateMatrix()
+        m.setMatrixAt(n, obj.matrix)
+        m.setColorAt(n, c)
+      }
+      n++
+    }
+    for (const m of [line.current, glow.current]) {
+      if (!m) continue
+      m.count = n
+      m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
+    }
+    if (glow.current) (glow.current.material as THREE.MeshBasicMaterial).opacity = 0.18 + pulse * 0.22
+  })
+  return (
+    <group>
+      <instancedMesh ref={line} args={[hull, undefined, tools.length]} frustumCulled={false} raycast={() => null}>
+        <meshBasicMaterial side={THREE.BackSide} toneMapped={false} />
+      </instancedMesh>
+      <instancedMesh ref={glow} args={[hull, undefined, tools.length]} frustumCulled={false} raycast={() => null}>
+        <meshBasicMaterial side={THREE.BackSide} transparent depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} />
+      </instancedMesh>
     </group>
   )
 }

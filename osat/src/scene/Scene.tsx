@@ -10,6 +10,7 @@ import { isMoving, positionOf, useUI, worldPos } from '../store'
 import { Building } from './Building'
 import { Landscape } from './Landscape'
 import { LowerFloors } from './LowerFloors'
+import { Overlays } from './Overlays'
 import { LabelProjector } from './labels'
 import { Equipment } from './Equipment'
 import { People } from './People'
@@ -179,6 +180,17 @@ function SelectionMarker() {
   )
 }
 
+function SiteLayers() {
+  const site = useUI(s => s.layers.site)
+  const floors = useUI(s => s.layers.floors)
+  return (
+    <>
+      {site && <Landscape />}
+      {floors && <LowerFloors />}
+    </>
+  )
+}
+
 /** Left-drag orbits the building, right-drag (or two fingers) pans on the floor, wheel zooms. */
 function Controls({ cx }: { cx: number }) {
   const spin = useUI(s => s.spin)
@@ -241,14 +253,14 @@ export function Scene() {
       </directionalLight>
       <directionalLight position={[cx - 80, 60, -60]} intensity={0.45} />
       <SimDriver />
-      <Landscape />
-      <LowerFloors />
+      <SiteLayers />
       <group position={[0, FLOOR_Y, 0]}>
         <Building />
         <Equipment />
         <Transport />
         <People />
         <WarRoom />
+        <Overlays />
         <SelectionMarker />
       </group>
       <LabelProjector />

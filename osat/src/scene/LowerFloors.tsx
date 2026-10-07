@@ -29,6 +29,7 @@ export function LowerFloors() {
     const frame: THREE.BufferGeometry[] = []
     const clad: THREE.BufferGeometry[] = []
     const louvre: THREE.BufferGeometry[] = []
+    const glass2: THREE.BufferGeometry[] = []
     const dock: THREE.BufferGeometry[] = []
     // building mass (slightly inset so façades sit on its faces)
     boxAt(core, W - 0.4, FLOOR_Y - 0.1, D - 0.4, cx, (FLOOR_Y - 0.1) / 2, cz)
@@ -60,15 +61,21 @@ export function LowerFloors() {
     // L2 cladding with louvre bands
     const y2 = STOREY + (STOREY - 0.6) / 2 + 0.3
     const h2 = STOREY - 0.9
-    boxAt(clad, W, h2, 0.1, cx, y2, B.z0 - 0.06)
-    boxAt(clad, W, h2, 0.1, cx, y2, B.z1 + 0.06)
-    boxAt(clad, 0.1, h2, D, B.x0 - 0.06, y2, cz)
-    boxAt(clad, 0.1, h2, D, B.x1 + 0.06, y2, cz)
-    for (let k = 0; k < 6; k++) {
-      const y = STOREY + 1.6 + k * 0.32
-      boxAt(louvre, W * 0.6, 0.12, 0.25, cx, y, B.z1 + 0.15)
-      boxAt(louvre, W * 0.6, 0.12, 0.25, cx, y, B.z0 - 0.15)
+    // L2: full-height glazing with white vertical fins and a spandrel band at sill level
+    boxAt(glass2, W, h2, 0.05, cx, y2, B.z0 - 0.06)
+    boxAt(glass2, W, h2, 0.05, cx, y2, B.z1 + 0.06)
+    boxAt(glass2, 0.05, h2, D, B.x0 - 0.06, y2, cz)
+    boxAt(glass2, 0.05, h2, D, B.x1 + 0.06, y2, cz)
+    for (let x = B.x0; x <= B.x1 + 0.01; x += 1.5) {
+      boxAt(louvre, 0.08, h2, 0.45, x, y2, B.z0 - 0.25)
+      boxAt(louvre, 0.08, h2, 0.45, x, y2, B.z1 + 0.25)
     }
+    for (let z = B.z0; z <= B.z1 + 0.01; z += 1.5) {
+      boxAt(louvre, 0.45, h2, 0.08, B.x0 - 0.25, y2, z)
+      boxAt(louvre, 0.45, h2, 0.08, B.x1 + 0.25, y2, z)
+    }
+    boxAt(clad, W, 0.5, 0.12, cx, STOREY + 0.55, B.z0 - 0.08)
+    boxAt(clad, W, 0.5, 0.12, cx, STOREY + 0.55, B.z1 + 0.08)
     // entrance canopy + doors (south, centre)
     boxAt(frame, 14, 0.35, 5, cx, 4.2, B.z1 + 2.5)
     for (const x of [cx - 6.5, cx + 6.5]) boxAt(frame, 0.3, 4.1, 0.3, x, 2.05, B.z1 + 4.7)
@@ -79,6 +86,7 @@ export function LowerFloors() {
       frame: mergeGeometries(frame)!,
       clad: mergeGeometries(clad)!,
       louvre: mergeGeometries(louvre)!,
+      glass2: mergeGeometries(glass2)!,
       dock: mergeGeometries(dock)!,
     }
   }, [B])
@@ -87,8 +95,13 @@ export function LowerFloors() {
       <mesh geometry={geo.core} receiveShadow>
         <meshStandardMaterial color="#d7dce2" roughness={0.8} />
       </mesh>
+      {/* L1: mirror-like reflective curtain wall */}
       <mesh geometry={geo.glass} receiveShadow>
-        <meshStandardMaterial color="#5d7d99" roughness={0.08} metalness={0.6} envMapIntensity={1.6} />
+        <meshPhysicalMaterial color="#9ec3dd" metalness={0.95} roughness={0.04} clearcoat={1} clearcoatRoughness={0.02} envMapIntensity={2.6} />
+      </mesh>
+      {/* L2: lighter blue-green vision glass */}
+      <mesh geometry={geo.glass2} receiveShadow>
+        <meshPhysicalMaterial color="#a9d3df" metalness={0.7} roughness={0.06} clearcoat={1} envMapIntensity={2.0} />
       </mesh>
       <mesh geometry={geo.frame} castShadow receiveShadow>
         <meshStandardMaterial color="#3a414b" roughness={0.5} metalness={0.4} />
@@ -97,7 +110,7 @@ export function LowerFloors() {
         <meshStandardMaterial color="#f1f3f5" roughness={0.5} metalness={0.2} />
       </mesh>
       <mesh geometry={geo.louvre} castShadow>
-        <meshStandardMaterial color="#9aa5b1" roughness={0.4} metalness={0.5} />
+        <meshStandardMaterial color="#f4f6f8" roughness={0.4} metalness={0.3} />
       </mesh>
       <mesh geometry={geo.dock}>
         <meshStandardMaterial color="#59616b" roughness={0.6} />

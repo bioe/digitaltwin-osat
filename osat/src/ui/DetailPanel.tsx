@@ -10,7 +10,7 @@ export function DetailPanel() {
   const sel = useUI(s => s.sel)
   const select = useUI(s => s.select)
   return (
-    <div className="dock scroll-thin relative h-full overflow-y-auto border-l px-3.5 py-3">
+    <div className="scroll-thin relative h-full overflow-y-auto px-3.5 py-3">
       {sel && isMoving(sel) && (
         <div className="absolute right-9 top-3 flex items-center gap-1 rounded bg-sky-400/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
           <span className="dot animate-pulse" style={{ background: '#38bdf8' }} /> Following

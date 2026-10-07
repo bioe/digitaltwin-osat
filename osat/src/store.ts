@@ -20,11 +20,32 @@ export interface FlyTarget {
   key: number
 }
 
+export interface Layers {
+  /** Status rings per state. */
+  run: boolean
+  idle: boolean
+  down: boolean
+  ai: boolean
+  oht: boolean
+  conv: boolean
+  arv: boolean
+  people: boolean
+  /** Glowing material-flow overlay on the transport tracks. */
+  flow: boolean
+  /** Animated product route through the process rooms. */
+  route: boolean
+  labels: boolean
+  callouts: boolean
+  walls: boolean
+  site: boolean
+  floors: boolean
+}
+
 interface UI {
   sel: Sel
   fly: FlyTarget | null
   warRoom: boolean
-  layers: { oht: boolean; conv: boolean; arv: boolean; labels: boolean; people: boolean }
+  layers: Layers
   /** Auto-rotate the building. */
   spin: boolean
   /** Pending camera orbit step (radians). */
@@ -41,7 +62,12 @@ export const useUI = create<UI>(set => ({
   sel: null,
   fly: null,
   warRoom: false,
-  layers: { oht: true, conv: true, arv: true, labels: true, people: true },
+  layers: {
+    run: true, idle: true, down: true, ai: true,
+    oht: true, conv: true, arv: true, people: true,
+    flow: false, route: true, labels: true, callouts: true,
+    walls: true, site: true, floors: true,
+  },
   spin: false,
   orbitReq: null,
   orbit: (az, pol = 0) => set({ orbitReq: { az, pol, key: Math.random() } }),

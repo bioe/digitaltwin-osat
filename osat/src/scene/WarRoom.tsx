@@ -169,8 +169,23 @@ export function WarRoom() {
     e.stopPropagation()
     useUI.getState().setWarRoom(true)
   }
-  const panelW = 2.1
-  const panelH = panelW * (9 / 16)
+  // screens: 1.9 m tall; side screens turned 12° toward the room
+  const wall = useMemo(() => {
+    const h = 1.9
+    const y = 0.9 + h / 2
+    const z = wr.z0 + 0.1
+    const by = (k: string) => screens.find(q => q.key === k)!
+    const cw = (h * 1792) / 1152
+    const sw = (h * 1024) / 1152
+    const ry = 0.21
+    const edge = cw / 2 + 0.05
+    return [
+      { s: by('title'), x: cx, y: 3.08, z: wr.z0 + 0.02, ry: 0, w: 3.6, h: 0.45 },
+      { s: by('left'), x: cx - edge - (sw / 2) * Math.cos(ry), y, z: z + (sw / 2) * Math.sin(ry), ry, w: sw, h },
+      { s: by('center'), x: cx, y, z, ry: 0, w: cw, h },
+      { s: by('right'), x: cx + edge + (sw / 2) * Math.cos(ry), y, z: z + (sw / 2) * Math.sin(ry), ry: -ry, w: sw, h },
+    ]
+  }, [screens, cx, wr])
   const inst = (model: string, list: THREE.Matrix4[], person = false) => (
     <Instanced
       model={model}
@@ -215,20 +230,20 @@ export function WarRoom() {
         <mesh geometry={steel.steel} castShadow>
           <meshStandardMaterial color="#1c1f24" roughness={0.45} metalness={0.6} />
         </mesh>
-        {/* video wall: 3 × 2 thin-bezel panels */}
-        <mesh position={[cx, 1.85, wr.z0 + 0.04]} castShadow>
-          <boxGeometry args={[panelW * 3 + 0.18, panelH * 2 + 0.16, 0.08]} />
-          <meshStandardMaterial color="#0b0d10" roughness={0.4} />
-        </mesh>
-        {screens.map((s, i) => (
-          <mesh
-            key={i}
-            position={[cx + ((i % 3) - 1) * (panelW + 0.02), 1.85 + (0.5 - Math.floor(i / 3)) * (panelH + 0.02), wr.z0 + 0.085]}
-            onClick={open}
-          >
-            <planeGeometry args={[panelW, panelH]} />
-            <meshBasicMaterial map={s.tex} toneMapped={false} />
-          </mesh>
+        {/* command-centre video wall: brand strip + left / centre / right screens (slightly wrapped) */}
+        {wall.map(({ s, x, z, ry, w, h, y }) => (
+          <group key={s.key} position={[x, y, z]} rotation={[0, ry, 0]}>
+            {s.key !== 'title' && (
+              <mesh position={[0, 0, -0.03]} castShadow>
+                <boxGeometry args={[w + 0.06, h + 0.06, 0.05]} />
+                <meshStandardMaterial color="#0b0d10" roughness={0.4} />
+              </mesh>
+            )}
+            <mesh onClick={open}>
+              <planeGeometry args={[w, h]} />
+              <meshBasicMaterial map={s.tex} toneMapped={false} transparent={s.key === 'title'} />
+            </mesh>
+          </group>
         ))}
         {inst('consoleDesk', P.desks)}
         {inst('chair', P.seats)}
