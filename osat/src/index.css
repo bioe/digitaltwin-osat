@@ -1,0 +1,146 @@
+@import 'tailwindcss';
+
+:root {
+  --bg: #0b1220;
+  --panel: rgba(10, 19, 34, 0.86);
+  --line: rgba(56, 189, 248, 0.22);
+  --ink: #e6eefb;
+  --ink2: #9fb3cc;
+  --ink3: #6b819e;
+  --cyan: #38bdf8;
+  --run: #1fd67a;
+  --idle: #ffc534;
+  --alarm: #ff3045;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.hud {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.dock {
+  background: #0a1322;
+  border-color: var(--line);
+}
+
+.hud-title {
+  font-family: Rajdhani, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cyan);
+  font-size: 13px;
+}
+
+.num {
+  font-family: Rajdhani, sans-serif;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.btn {
+  font-family: Rajdhani, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-size: 13px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(56, 189, 248, 0.06);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn:hover {
+  background: rgba(56, 189, 248, 0.18);
+}
+.btn.on {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: var(--cyan);
+}
+.btn.danger {
+  border-color: rgba(255, 48, 69, 0.5);
+  background: rgba(255, 48, 69, 0.12);
+}
+
+.zone-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  background: rgba(8, 15, 28, 0.82);
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 3px 10px 3px 6px;
+  font-family: Rajdhani, sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  color: #e6eefb;
+  user-select: none;
+}
+.zone-num {
+  font-size: 11px;
+  color: #6b819e;
+}
+.zone-mode {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+.stk-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #cfe0f5;
+  background: rgba(8, 15, 28, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 4px;
+  padding: 1px 5px;
+  user-select: none;
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 3px;
+}
+
+@keyframes pulse-red {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 48, 69, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 48, 69, 0);
+  }
+}
+.pulse {
+  animation: pulse-red 1.4s infinite;
+}
