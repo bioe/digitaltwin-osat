@@ -10,6 +10,7 @@ import { Performance } from './ui/Performance'
 import { TopBar } from './ui/TopBar'
 import { TourHud } from './ui/TourHud'
 import { TwinPanel } from './ui/TwinPanel'
+import { Analysis } from './ui/Analysis'
 import { WarRoomOverlay } from './ui/WarRoomOverlay'
 
 /**
@@ -22,8 +23,8 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return
-      if ((e.key === 'f' || e.key === 'F') && !useUI.getState().tour) useUI.getState().toggleFocus()
-      if (e.key === 'Escape' && useUI.getState().focus && !useUI.getState().tour && !useUI.getState().warRoom) useUI.getState().toggleFocus()
+      if ((e.key === 'f' || e.key === 'F') && !useUI.getState().tour && !useUI.getState().warRoom && !useUI.getState().analysis) useUI.getState().toggleFocus()
+      if (e.key === 'Escape' && useUI.getState().focus && !useUI.getState().tour && !useUI.getState().warRoom && !useUI.getState().analysis) useUI.getState().toggleFocus()
     }
     const onFs = () => {
       // leaving browser fullscreen ends whichever full-window mode is active (tour or fullscreen)
@@ -69,6 +70,7 @@ export function App() {
         </div>
       </div>
       <WarRoomOverlay />
+      <Analysis />
     </div>
   )
 }

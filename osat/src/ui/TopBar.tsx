@@ -7,6 +7,7 @@ import { perfStats } from '../scene/Scene'
 export function TopBar() {
   const w = useTick(2)
   const setWarRoom = useUI(s => s.setWarRoom)
+  const setAnalysis = useUI(s => s.setAnalysis)
   const toggleFocus = useUI(s => s.toggleFocus)
   const setTour = useUI(s => s.setTour)
   return (
@@ -38,6 +39,9 @@ export function TopBar() {
         </button>
         <button className="btn !px-3 !py-2 !text-[14px]" title="Fullscreen 3D view (F)" onClick={toggleFocus}>
           ⛶ FULLSCREEN
+        </button>
+        <button className="btn !border-sky-400/60 !bg-sky-500/15 !px-3 !py-2 !text-[14px]" title="What-if optimisation: fleets, people and production vs output" onClick={() => setAnalysis(true)}>
+          📈 ANALYSIS
         </button>
         <button className="btn !border-rose-400/60 !bg-rose-500/15 !px-3 !py-2 !text-[14px]" onClick={() => setWarRoom(true)}>
           ◉ WAR ROOM

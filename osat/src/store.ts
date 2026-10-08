@@ -47,6 +47,8 @@ interface UI {
   sel: Sel
   fly: FlyTarget | null
   warRoom: boolean
+  /** What-if analysis page. */
+  analysis: boolean
   layers: Layers
   /** Auto-rotate the building. */
   spin: boolean
@@ -66,6 +68,7 @@ interface UI {
   select: (s: Sel, focus?: boolean) => void
   flyTo: (target: [number, number, number], dist?: number) => void
   setWarRoom: (v: boolean) => void
+  setAnalysis: (v: boolean) => void
   toggle: (k: keyof UI['layers']) => void
 }
 
@@ -79,6 +82,7 @@ export const useUI = create<UI>(set => ({
   sel: null,
   fly: null,
   warRoom: false,
+  analysis: false,
   layers: {
     run: true, idle: true, down: true, ai: true,
     oht: true, conv: true, arv: true, people: true,
@@ -117,7 +121,8 @@ export const useUI = create<UI>(set => ({
   },
   flyTo: (t, dist = 1) =>
     set({ fly: { target: [t[0], t[1] + FLOOR_Y, t[2]], offset: [18 * dist, Math.max(13, 42 * dist), 32 * dist * side(t[2])], key: Math.random() } }),
-  setWarRoom: warRoom => set({ warRoom }),
+  setWarRoom: warRoom => set({ warRoom, analysis: false }),
+  setAnalysis: analysis => set({ analysis, warRoom: false }),
   toggle: k => set(s => ({ layers: { ...s.layers, [k]: !s.layers[k] } })),
 }))
 

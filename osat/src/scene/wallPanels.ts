@@ -462,7 +462,7 @@ const drawRight: Draw = g => {
   })
 }
 
-export const SCREENS: Screen[] = [
+const SCREENS: Screen[] = [
   { key: 'title', w: 2048, h: 256, draw: drawTitle },
   { key: 'left', w: 1024, h: 1152, draw: drawLeft },
   { key: 'center', w: 1792, h: 1152, draw: drawCenter },

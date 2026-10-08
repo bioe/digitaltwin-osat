@@ -241,6 +241,34 @@ export const OHT_FLEET = 10
 /** Line takt (s per lot). Each zone runs at ~80% load: pt = count × TAKT × 0.8. */
 const TAKT = 36
 
+/** Operators per zone at the reference staffing (17 in all). */
+const CREW: [ProcId, number][] = [
+  ['sort', 2], ['grind', 1], ['saw', 1], ['da', 2], ['wb', 3], ['mold', 1], ['mark', 1], ['pkgsaw', 2], ['test', 2], ['fvi', 1], ['tnr', 1],
+]
+
+/** What-if inputs: fleets, people and the lot release interval (s per lot). */
+export interface SimConfig {
+  oht: number
+  arv: number
+  operators: number
+  techs: number
+  takt: number
+}
+export const BASE_CONFIG: SimConfig = { oht: OHT_FLEET, arv: 8, operators: CREW.reduce((a, c) => a + c[1], 0), techs: 8, takt: TAKT }
+
+/** Spread `total` operators over the zones in proportion to the reference crew (highest averages method). */
+function crewFor(total: number): [ProcId, number][] {
+  const out = CREW.map(([p]) => [p, 0] as [ProcId, number])
+  for (let k = 0; k < total; k++) {
+    let best = 0
+    CREW.forEach(([, base], i) => {
+      if (base / (out[i][1] + 1) > CREW[best][1] / (out[best][1] + 1)) best = i
+    })
+    out[best][1]++
+  }
+  return out
+}
+
 const rand = (a: number, b: number) => a + Math.random() * (b - a)
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)]
 
@@ -358,7 +386,21 @@ export class World {
   speed = 2
   version = 0
 
-  constructor() {
+  /** Fleet, people and release settings of this run. */
+  readonly cfg: SimConfig
+  /** ARV docks: the layout's charger row, extended west when a what-if run has more ARVs. */
+  readonly chargers: { pos: P2; rotY: number }[]
+
+  /** Lots finished at any process step (what-if runs measure line throughput from this). */
+  stepDone = 0
+
+  /** `lean`: start with thin stocker buffers so what-if runs reach their steady state quickly. */
+  constructor(cfg: Partial<SimConfig> = {}, opts: { lean?: boolean } = {}) {
+    this.cfg = { ...BASE_CONFIG, ...cfg }
+    const ch = this.L.chargers
+    this.chargers = Array.from({ length: Math.max(ch.length, this.cfg.arv) }, (_, i) =>
+      i < ch.length ? ch[i] : { pos: [ch[0].pos[0] - (i - ch.length + 1) * 1.6, ch[0].pos[1]] as P2, rotY: ch[0].rotY },
+    )
     const now = new Date()
     now.setHours(14, 12, 0, 0)
     this.clock = now.getTime()
@@ -376,7 +418,7 @@ export class World {
     this.addShipTools()
     for (const sp of this.L.stockers) {
       const s: Stocker = { ...sp, lots: [], reserved: 0, crane: { x: 0.5, y: 0.2, tx: 0.5, ty: 0.2 }, activeT: 0, moves: 0 }
-      const n = sp.idx === 0 ? 24 : sp.idx === 11 ? 18 : Math.round(rand(4, 12))
+      const n = opts.lean ? (sp.idx === 0 ? 6 : 2) : sp.idx === 0 ? 24 : sp.idx === 11 ? 18 : Math.round(rand(4, 12))
       for (let i = 0; i < n; i++) s.lots.push(this.newLot(sp.idx))
       this.stockers.push(s)
     }
@@ -395,13 +437,13 @@ export class World {
     }
     // fleets
     const ohtLoop = this.L.loops.OHT
-    for (let i = 0; i < OHT_FLEET; i++) {
+    for (let i = 0; i < this.cfg.oht; i++) {
       this.oht.push({
-        id: `OHT-${String(i + 1).padStart(2, '0')}`, s: (ohtLoop.length / OHT_FLEET) * i, v: 1.5, job: null,
+        id: `OHT-${String(i + 1).padStart(2, '0')}`, s: (ohtLoop.length / this.cfg.oht) * i, v: 1.5, job: null,
         phase: 'free', hoist: 0, hoistTarget: 0, carry: null, timer: 0, activeT: 0, moves: Math.round(rand(80, 160)),
       })
     }
-    this.L.chargers.forEach((c, i) => {
+    this.chargers.slice(0, this.cfg.arv).forEach((c, i) => {
       this.arvs.push({
         id: `ARV-${String(i + 1).padStart(2, '0')}`, pos: [c.pos[0], c.pos[1]], heading: c.rotY, path: [], job: null,
         phase: 'parked', lift: 0, liftTarget: 0, carry: null, slide: 0, slidePort: null,
@@ -414,10 +456,10 @@ export class World {
       label: 'Standing by', task: null, working: false, timer: rand(0, 4), carry: null, tool: null, home, jobs: Math.round(rand(8, 30)), onCall: false, eta: 0,
     })
     const techNames = ['A. Rahman', 'L. Chen', 'P. Kumar', 'S. Tan', 'M. Ong', 'R. Lim', 'K. Wong', 'N. Aziz']
-    techNames.forEach((name, i) => this.techs.push(mk(`TECH-${i + 1}`, name, 'tech', null, [wr.x1 + 9 + i * 0.9, -1.4])))
-    const crew: [ProcId, number][] = [
-      ['sort', 2], ['grind', 1], ['saw', 1], ['da', 2], ['wb', 3], ['mold', 1], ['mark', 1], ['pkgsaw', 2], ['test', 2], ['fvi', 1], ['tnr', 1],
-    ]
+    for (let i = 0; i < this.cfg.techs; i++) {
+      this.techs.push(mk(`TECH-${i + 1}`, techNames[i % techNames.length], 'tech', null, [wr.x1 + 9 + (i % 8) * 0.9, -1.4 - Math.floor(i / 8) * 0.9]))
+    }
+    const crew = crewFor(this.cfg.operators)
     const opNames = ['Aisyah', 'Bala', 'Chong', 'Devi', 'Eng', 'Farah', 'Gopal', 'Hui Min', 'Irfan', 'Jia Wei', 'Kavitha', 'Lim', 'Mei Ling', 'Nurul', 'Omar', 'Priya', 'Qistina', 'Raj']
     let k = 0
     for (const [proc, n] of crew) {
@@ -779,6 +821,7 @@ export class World {
     if (t.lot && t.progress >= 1 && !t.out) {
       const nxt = PROCESSES[stage + 1]
       t.out = { ...t.lot, stage: stage + 1, carrier: nxt ? nxt.carrier : 'reelBox' }
+      this.stepDone++
       t.lot = null
     }
     if (!t.lot && t.next) {
@@ -858,7 +901,7 @@ export class World {
     // incoming wafers and finished goods shipping
     const s0 = this.stockers[0]
     this.releaseAcc += dt
-    if (this.releaseAcc >= TAKT) {
+    if (this.releaseAcc >= this.cfg.takt) {
       this.releaseAcc = 0
       if (s0.lots.length < 40) s0.lots.push(this.newLot(0))
     }
@@ -1052,7 +1095,7 @@ export class World {
         if (this.followPath(a, dt, 1.5, 2.2)) {
           if (a.phase === 'toPark') {
             a.phase = 'parked'
-            a.heading = this.L.chargers[a.charger].rotY
+            a.heading = this.chargers[a.charger].rotY
           } else {
             const port = a.phase === 'toPick' ? a.job!.from.port : a.job!.to.port
             a.slidePort = port
@@ -1093,7 +1136,7 @@ export class World {
             a.moves++
             a.slidePort = null
             // never idle in a lane: head back to the dock (a new job can still grab it on the way)
-            const c = this.L.chargers[a.charger]
+            const c = this.chargers[a.charger]
             a.phase = 'toPark'
             a.path = this.keepRight(this.route(a.pos, [c.pos[0], c.pos[1]], ARV_LANE, ARV_LANE), ARV_KEEP)
           }
@@ -1630,4 +1673,4 @@ export function carrierH(c: CarrierKey) {
 
 export const world = new World()
 
-if (import.meta.env.DEV) (window as unknown as { __world: World }).__world = world
+if (import.meta.env.DEV && typeof window !== 'undefined') (window as unknown as { __world: World }).__world = world
